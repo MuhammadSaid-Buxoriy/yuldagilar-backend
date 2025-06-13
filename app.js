@@ -14,6 +14,9 @@ import userRoutes from './src/routes/users.js';
 import taskRoutes from './src/routes/tasks.js';
 import leaderboardRoutes from './src/routes/leaderboard.js';
 
+// Import bot functions (webhook mode)
+import { processWebhookUpdate } from './telegram-bot.js';
+
 // Load environment variables
 dotenv.config();
 
@@ -77,6 +80,52 @@ app.use((req, res, next) => {
   next();
 });
 
+// ==================== TELEGRAM WEBHOOK ENDPOINT ====================
+
+/**
+ * Telegram Webhook Endpoint
+ * POST /webhook
+ * 
+ * Receives updates from Telegram and processes them through the bot
+ */
+app.post('/webhook', async (req, res) => {
+  try {
+    console.log('📨 Webhook received from Telegram:', {
+      update_id: req.body.update_id,
+      message: req.body.message ? {
+        from: req.body.message.from?.first_name,
+        chat_id: req.body.message.chat?.id,
+        text: req.body.message.text?.substring(0, 50) + '...'
+      } : null,
+      callback_query: req.body.callback_query ? {
+        data: req.body.callback_query.data,
+        from: req.body.callback_query.from?.first_name
+      } : null
+    });
+    
+    // Process update through bot
+    const result = await processWebhookUpdate(req.body);
+    
+    if (result.success) {
+      console.log('✅ Webhook processed successfully');
+      res.status(200).json({ ok: true });
+    } else {
+      console.log('❌ Webhook processing failed:', result.error);
+      res.status(500).json({ 
+        ok: false, 
+        error: result.error 
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Webhook endpoint error:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
 // ==================== API DOCUMENTATION & HEALTH ====================
 
 /**
@@ -97,12 +146,21 @@ app.get('/', (req, res) => {
     real_time_polling: '15 seconds',
     response_format: 'JSON with success/error flags',
     
+    // Telegram Integration Status
+    telegram_integration: {
+      webhook_endpoint: '/webhook',
+      bot_mode: 'webhook',
+      polling_disabled: true,
+      webhook_ready: true
+    },
+    
     // Complete API Documentation
     endpoints: {
       // Health & Info
       health: 'GET /api/health',
       database: 'GET /api/test-db',
       ping: 'GET /ping',
+      webhook: 'POST /webhook',
       
       // Authentication Flow
       auth: {
@@ -160,7 +218,8 @@ app.get('/', (req, res) => {
       real_time: 'Frontend polling (15s intervals)',
       performance: 'Sub-500ms response times',
       scalability: '1000+ concurrent users',
-      compatibility: '100% frontend compatible'
+      compatibility: '100% frontend compatible',
+      bot_integration: 'Webhook mode (production ready)'
     }
   });
 });
@@ -199,13 +258,21 @@ app.get('/api/health', async (req, res) => {
     // Database Health
     database: dbHealth,
     
+    // Telegram Bot Status
+    telegram_bot: {
+      mode: 'webhook',
+      webhook_endpoint: '/webhook',
+      polling_disabled: true,
+      status: '✅ Ready for webhook updates'
+    },
+    
     // Feature Status
     features: {
       'User Authentication': '✅ Active',
       'Daily Progress Tracking': '✅ Active', 
       'Dynamic Leaderboard': '✅ Active',
       'Achievement System': '✅ Active',
-      'Telegram Bot Integration': '✅ Ready',
+      'Telegram Bot Integration': '✅ Webhook Ready',
       'Real-time Statistics': '✅ Active',
       'Admin Approval System': '✅ Active',
       'Frontend Compatibility': '✅ 100%'
@@ -284,7 +351,8 @@ app.get('/ping', (req, res) => {
     timestamp: new Date().toISOString(),
     server: 'yoldagilar-backend',
     version: '1.0.0',
-    request_id: req.requestId
+    request_id: req.requestId,
+    webhook_ready: true
   });
 });
 
@@ -309,6 +377,13 @@ if (process.env.NODE_ENV !== 'production') {
       
       // Partial URL for verification (without security risk)
       supabase_url_preview: process.env.SUPABASE_URL?.substring(0, 50) + '...',
+      
+      // Bot configuration
+      bot_configuration: {
+        mode: 'webhook',
+        polling_disabled: true,
+        webhook_endpoint: '/webhook'
+      },
       
       frontend_compatible: true,
       timestamp: new Date().toISOString()
@@ -355,6 +430,7 @@ app.use((req, res) => {
       'GET /ping', 
       'GET /api/health',
       'GET /api/test-db',
+      'POST /webhook',
       'POST /api/auth/check',
       'GET /api/users/:userId/statistics',
       'POST /api/tasks/submit',

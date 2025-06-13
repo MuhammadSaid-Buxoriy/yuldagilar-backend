@@ -1,5 +1,5 @@
 // =====================================================
-// TELEGRAM BOT - Professional Backend Integration
+// TELEGRAM BOT - Webhook Compatible
 // =====================================================
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
@@ -23,21 +23,74 @@ const CONFIG = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   ADMIN_ID: parseInt(process.env.ADMIN_ID),
   MINI_APP_URL: process.env.MINI_APP_URL || 'https://yuldagilar.vercel.app',
-  API_BASE_URL: 'http://localhost:3000/api', // Backend API
+  API_BASE_URL: process.env.NODE_ENV === 'production' 
+    ? 'https://your-backend-url.com/api'  // Production API URL
+    : 'http://localhost:3000/api',        // Development API URL
   SESSION_TTL: 30 * 60 * 1000 // 30 minutes
 };
 
-// Create bot instance
+// ==================== BOT INSTANCE CREATION ====================
+
+// Create bot instance WITHOUT polling (webhook mode)
 const bot = new TelegramBot(CONFIG.BOT_TOKEN, { 
-  polling: {
-    interval: 1000,
-    autoStart: true,
-    params: {
-      timeout: 30,
-      allowed_updates: ['message', 'callback_query', 'web_app_data']
-    }
-  }
+  polling: false  // ✅ Webhook rejimi uchun polling o'chirildi
 });
+
+console.log('🤖 Bot created in webhook mode');
+
+// ==================== WEBHOOK SETUP ====================
+
+/**
+ * Set webhook URL (production only)
+ */
+async function setupWebhook(webhookUrl) {
+  try {
+    console.log(`🔗 Setting webhook: ${webhookUrl}`);
+    
+    // Delete old webhook first
+    await bot.deleteWebHook();
+    
+    // Set new webhook
+    const result = await bot.setWebHook(webhookUrl, {
+      allowed_updates: ['message', 'callback_query', 'web_app_data']
+    });
+    
+    if (result) {
+      console.log('✅ Webhook set successfully');
+      
+      // Verify webhook
+      const webhookInfo = await bot.getWebHookInfo();
+      console.log('📋 Webhook info:', {
+        url: webhookInfo.url,
+        pending_update_count: webhookInfo.pending_update_count,
+        last_error_date: webhookInfo.last_error_date,
+        last_error_message: webhookInfo.last_error_message
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Webhook setup failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process incoming webhook updates
+ */
+async function processWebhookUpdate(update) {
+  try {
+    console.log('📨 Processing update:', update.update_id);
+    
+    // Process the update
+    await bot.processUpdate(update);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Update processing error:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 // Temporary user sessions
 const userSessions = new Map();
@@ -82,7 +135,10 @@ async function makeAPIRequest(endpoint, options = {}) {
  * Check user registration status via API
  */
 async function checkUserRegistration(tgId) {
-  const response = await makeAPIRequest(`/auth/check/${tgId}`);
+  const response = await makeAPIRequest(`/auth/check`, {
+    method: 'POST',
+    body: { userId: tgId }
+  });
   return response;
 }
 
@@ -527,41 +583,20 @@ bot.on('web_app_data', async (msg) => {
 // ==================== ERROR HANDLING ====================
 
 bot.on('polling_error', (error) => {
-  console.error('❌ Polling error:', error.code || 'UNKNOWN', error.message);
-  
-  if (error.code === 'ETELEGRAM' && error.response?.statusCode === 409) {
-    console.error('❌ Bot conflict! Another instance is running.');
-    process.exit(1);
-  }
+  console.error('❌ Polling error (should not happen in webhook mode):', error);
 });
 
 bot.on('error', (error) => {
   console.error('❌ Bot error:', error.message || error);
 });
 
-// ==================== GRACEFUL SHUTDOWN ====================
+// ==================== WEBHOOK MODE INFO ====================
 
-const gracefulShutdown = () => {
-  console.log('\n🛑 Bot stopping...');
-  
-  bot.stopPolling().then(() => {
-    console.log('✅ Bot stopped successfully');
-    process.exit(0);
-  }).catch((error) => {
-    console.error('❌ Error stopping bot:', error);
-    process.exit(1);
-  });
-};
-
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-
-// ==================== STARTUP ====================
-
-console.log('🤖 Yoldagilar Telegram Bot starting...');
+console.log('🤖 Yoldagilar Telegram Bot (Webhook Mode)');
 console.log(`📊 Admin ID: ${CONFIG.ADMIN_ID}`);
 console.log(`🌐 Mini App URL: ${CONFIG.MINI_APP_URL}`);
 console.log(`📡 API Base URL: ${CONFIG.API_BASE_URL}`);
-console.log('💬 Bot ready! Users can send /start');
+console.log('🔗 Webhook ready for incoming updates');
 
-export default bot;
+// Export both named exports and default
+export { bot as default, setupWebhook, processWebhookUpdate };
