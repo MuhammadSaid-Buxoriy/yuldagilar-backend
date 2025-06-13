@@ -1,12 +1,11 @@
 // =====================================================
-// SERVER STARTUP - Webhook Ready
+// SERVER STARTUP - Polling Mode Ready
 // =====================================================
 // File: server.js
 
 import dotenv from 'dotenv';
 import app from './app.js';
 import { testConnection, initializeDatabase } from './src/config/database.js';
-import { setupWebhook } from './telegram-bot.js';
 
 // Load environment variables
 dotenv.config();
@@ -14,38 +13,8 @@ dotenv.config();
 const PORT = process.env.PORT || 3000;
 
 /**
- * Setup Telegram webhook (production only)
- */
-async function setupTelegramWebhook() {
-  try {
-    // Only setup webhook in production or when WEBHOOK_URL is provided
-    const webhookUrl = process.env.WEBHOOK_URL;
-    
-    if (!webhookUrl) {
-      console.log('🔗 WEBHOOK_URL not provided - skipping webhook setup');
-      console.log('💡 For production: Set WEBHOOK_URL=https://your-domain.com/webhook');
-      return;
-    }
-
-    console.log('🔗 Setting up Telegram webhook...');
-    await setupWebhook(`${webhookUrl}/webhook`);
-    console.log('✅ Telegram webhook configured successfully');
-    
-  } catch (error) {
-    console.error('❌ Webhook setup failed:', error.message);
-    
-    // Don't exit in development, but warn
-    if (process.env.NODE_ENV === 'production') {
-      console.error('🚨 Production requires working webhook - exiting');
-      process.exit(1);
-    } else {
-      console.log('⚠️ Development mode: continuing without webhook');
-    }
-  }
-}
-
-/**
- * Start server with database initialization and webhook setup
+ * Start server with database initialization
+ * Bot runs separately in polling mode
  */
 async function startServer() {
   try {
@@ -64,19 +33,22 @@ async function startServer() {
       console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
       console.log(`📖 API Docs: http://localhost:${PORT}/`);
       console.log(`🔍 Test DB: http://localhost:${PORT}/api/test-db`);
-      console.log(`🔗 Webhook Endpoint: http://localhost:${PORT}/webhook`);
       console.log('═'.repeat(50));
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🗄️ Database: Supabase Connected`);
       console.log(`🤖 Bot Token: ${process.env.BOT_TOKEN ? 'Configured ✅' : 'Missing ❌'}`);
       console.log(`👤 Admin ID: ${process.env.ADMIN_ID || 'Not set'}`);
-      console.log(`🔗 Webhook URL: ${process.env.WEBHOOK_URL || 'Not set (development mode)'}`);
       console.log(`🎯 Frontend Compatible: 100% ✅`);
-      console.log(`🤖 Bot Mode: Webhook (polling disabled) ✅`);
+      console.log(`🤖 Bot Mode: Polling (separate process) ✅`);
       console.log('═'.repeat(50));
       
-      // Setup Telegram webhook after server is running
-      await setupTelegramWebhook();
+      // Bot startup instructions
+      console.log('\n🤖 TELEGRAM BOT INSTRUCTIONS:');
+      console.log('📝 The bot runs as a separate process in polling mode');
+      console.log('🚀 To start bot: node telegram-bot.js');
+      console.log('🔄 Or use PM2: pm2 start telegram-bot.js --name "yoldagilar-bot"');
+      console.log('📋 Bot and server can run independently');
+      console.log('💡 No webhook setup required for polling mode');
       
       console.log('\n🛑 To stop server: Ctrl + C');
       console.log('🔄 To restart: rs + Enter\n');
@@ -89,6 +61,7 @@ async function startServer() {
       server.close(() => {
         console.log('✅ HTTP server closed');
         console.log('✅ Graceful shutdown complete');
+        console.log('💡 Note: Stop bot separately if running');
         process.exit(0);
       });
       
@@ -130,6 +103,7 @@ async function startServer() {
     if (error.message.includes('BOT_TOKEN')) {
       console.log('\n💡 Fix: Add bot token to .env file');
       console.log('   BOT_TOKEN=your-telegram-bot-token');
+      console.log('   ADMIN_ID=your-telegram-id');
     }
     
     process.exit(1);

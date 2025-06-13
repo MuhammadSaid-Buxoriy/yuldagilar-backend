@@ -1,5 +1,5 @@
 // =====================================================
-// TELEGRAM BOT - Webhook Compatible
+// TELEGRAM BOT - Polling Mode (Optimized)
 // =====================================================
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
@@ -23,74 +23,41 @@ const CONFIG = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   ADMIN_ID: parseInt(process.env.ADMIN_ID),
   MINI_APP_URL: process.env.MINI_APP_URL || 'https://yuldagilar.vercel.app',
-  API_BASE_URL: process.env.NODE_ENV === 'production' 
-    ? 'https://your-backend-url.com/api'  // Production API URL
-    : 'http://localhost:3000/api',        // Development API URL
+  API_BASE_URL: process.env.API_BASE_URL || 'http://localhost:3000/api',
   SESSION_TTL: 30 * 60 * 1000 // 30 minutes
 };
 
 // ==================== BOT INSTANCE CREATION ====================
 
-// Create bot instance WITHOUT polling (webhook mode)
+// Delete any existing webhook first (agar avval webhook o'rnatilgan bo'lsa)
+console.log('🔄 Checking and cleaning up webhooks...');
+
+// Create temporary bot instance to clean webhook
+const tempBot = new TelegramBot(CONFIG.BOT_TOKEN, { polling: false });
+
+try {
+  await tempBot.deleteWebHook();
+  console.log('✅ Webhook cleaned up successfully');
+} catch (error) {
+  console.log('⚠️ No webhook to clean or error:', error.message);
+}
+
+// Wait a bit before starting polling
+await new Promise(resolve => setTimeout(resolve, 2000));
+
+// Create bot instance with polling
 const bot = new TelegramBot(CONFIG.BOT_TOKEN, { 
-  polling: false  // ✅ Webhook rejimi uchun polling o'chirildi
+  polling: {
+    interval: 1000,        // Check for updates every 1 second
+    autoStart: true,       // Start polling automatically
+    params: {
+      timeout: 30,         // Long polling timeout
+      allowed_updates: ['message', 'callback_query', 'web_app_data']
+    }
+  }
 });
 
-console.log('🤖 Bot created in webhook mode');
-
-// ==================== WEBHOOK SETUP ====================
-
-/**
- * Set webhook URL (production only)
- */
-async function setupWebhook(webhookUrl) {
-  try {
-    console.log(`🔗 Setting webhook: ${webhookUrl}`);
-    
-    // Delete old webhook first
-    await bot.deleteWebHook();
-    
-    // Set new webhook
-    const result = await bot.setWebHook(webhookUrl, {
-      allowed_updates: ['message', 'callback_query', 'web_app_data']
-    });
-    
-    if (result) {
-      console.log('✅ Webhook set successfully');
-      
-      // Verify webhook
-      const webhookInfo = await bot.getWebHookInfo();
-      console.log('📋 Webhook info:', {
-        url: webhookInfo.url,
-        pending_update_count: webhookInfo.pending_update_count,
-        last_error_date: webhookInfo.last_error_date,
-        last_error_message: webhookInfo.last_error_message
-      });
-    }
-    
-    return result;
-  } catch (error) {
-    console.error('❌ Webhook setup failed:', error);
-    throw error;
-  }
-}
-
-/**
- * Process incoming webhook updates
- */
-async function processWebhookUpdate(update) {
-  try {
-    console.log('📨 Processing update:', update.update_id);
-    
-    // Process the update
-    await bot.processUpdate(update);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Update processing error:', error);
-    return { success: false, error: error.message };
-  }
-}
+console.log('🤖 Bot created with polling mode');
 
 // Temporary user sessions
 const userSessions = new Map();
@@ -108,7 +75,8 @@ async function makeAPIRequest(endpoint, options = {}) {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 15000 // 15 second timeout
     };
 
     const requestOptions = { ...defaultOptions, ...options };
@@ -119,7 +87,20 @@ async function makeAPIRequest(endpoint, options = {}) {
 
     console.log(`🌐 API Request: ${requestOptions.method} ${url}`);
     
-    const response = await fetch(url, requestOptions);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestOptions.timeout);
+    
+    const response = await fetch(url, {
+      ...requestOptions,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const result = await response.json();
     
     console.log(`📡 API Response [${response.status}]:`, result.success ? '✅' : '❌', result.message);
@@ -198,10 +179,17 @@ async function getUserProfilePhoto(userId) {
  */
 function cleanOldSessions() {
   const now = Date.now();
+  const oldCount = userSessions.size;
+  
   for (const [userId, session] of userSessions.entries()) {
     if (now - session.timestamp > CONFIG.SESSION_TTL) {
       userSessions.delete(userId);
     }
+  }
+  
+  const newCount = userSessions.size;
+  if (oldCount > newCount) {
+    console.log(`🧹 Cleaned ${oldCount - newCount} old sessions`);
   }
 }
 
@@ -583,20 +571,64 @@ bot.on('web_app_data', async (msg) => {
 // ==================== ERROR HANDLING ====================
 
 bot.on('polling_error', (error) => {
-  console.error('❌ Polling error (should not happen in webhook mode):', error);
+  console.error('❌ Polling error:', error.message || error);
+  
+  // Agar jiddiy xatolik bo'lsa, botni qayta ishga tushirish
+  if (error.code === 'ETELEGRAM' && error.response?.statusCode === 409) {
+    console.log('🔄 Conflict detected, restarting polling...');
+    setTimeout(() => {
+      process.exit(1); // PM2 yoki boshqa process manager qayta ishga tushiradi
+    }, 5000);
+  }
 });
 
 bot.on('error', (error) => {
   console.error('❌ Bot error:', error.message || error);
 });
 
-// ==================== WEBHOOK MODE INFO ====================
+// ==================== GRACEFUL SHUTDOWN ====================
 
-console.log('🤖 Yoldagilar Telegram Bot (Webhook Mode)');
+process.on('SIGINT', async () => {
+  console.log('🛑 Shutting down bot gracefully...');
+  
+  try {
+    await bot.stopPolling();
+    console.log('✅ Polling stopped');
+  } catch (error) {
+    console.error('❌ Error stopping polling:', error.message);
+  }
+  
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  
+  try {
+    await bot.stopPolling();
+    console.log('✅ Polling stopped');
+  } catch (error) {
+    console.error('❌ Error stopping polling:', error.message);
+  }
+  
+  process.exit(0);
+});
+
+// ==================== STARTUP INFO ====================
+
+console.log('🤖 Yoldagilar Telegram Bot - Polling Mode');
 console.log(`📊 Admin ID: ${CONFIG.ADMIN_ID}`);
 console.log(`🌐 Mini App URL: ${CONFIG.MINI_APP_URL}`);
 console.log(`📡 API Base URL: ${CONFIG.API_BASE_URL}`);
-console.log('🔗 Webhook ready for incoming updates');
+console.log('🔄 Bot is running with optimized polling...');
 
-// Export both named exports and default
-export { bot as default, setupWebhook, processWebhookUpdate };
+// Bot readiness check
+bot.getMe().then((botInfo) => {
+  console.log(`✅ Bot connected successfully: @${botInfo.username}`);
+}).catch((error) => {
+  console.error('❌ Failed to connect bot:', error.message);
+  process.exit(1);
+});
+
+// Export for external use
+export default bot;

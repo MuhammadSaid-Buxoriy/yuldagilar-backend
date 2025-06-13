@@ -1,5 +1,5 @@
 // =====================================================
-// MAIN EXPRESS APPLICATION - Frontend Compatible
+// MAIN EXPRESS APPLICATION - Polling Mode Compatible
 // =====================================================
 // File: app.js
 
@@ -13,9 +13,6 @@ import authRoutes from './src/routes/auth.js';
 import userRoutes from './src/routes/users.js';
 import taskRoutes from './src/routes/tasks.js';
 import leaderboardRoutes from './src/routes/leaderboard.js';
-
-// Import bot functions (webhook mode)
-import { processWebhookUpdate } from './telegram-bot.js';
 
 // Load environment variables
 dotenv.config();
@@ -80,52 +77,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ==================== TELEGRAM WEBHOOK ENDPOINT ====================
-
-/**
- * Telegram Webhook Endpoint
- * POST /webhook
- * 
- * Receives updates from Telegram and processes them through the bot
- */
-app.post('/webhook', async (req, res) => {
-  try {
-    console.log('📨 Webhook received from Telegram:', {
-      update_id: req.body.update_id,
-      message: req.body.message ? {
-        from: req.body.message.from?.first_name,
-        chat_id: req.body.message.chat?.id,
-        text: req.body.message.text?.substring(0, 50) + '...'
-      } : null,
-      callback_query: req.body.callback_query ? {
-        data: req.body.callback_query.data,
-        from: req.body.callback_query.from?.first_name
-      } : null
-    });
-    
-    // Process update through bot
-    const result = await processWebhookUpdate(req.body);
-    
-    if (result.success) {
-      console.log('✅ Webhook processed successfully');
-      res.status(200).json({ ok: true });
-    } else {
-      console.log('❌ Webhook processing failed:', result.error);
-      res.status(500).json({ 
-        ok: false, 
-        error: result.error 
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Webhook endpoint error:', error);
-    res.status(500).json({ 
-      ok: false, 
-      error: error.message 
-    });
-  }
-});
-
 // ==================== API DOCUMENTATION & HEALTH ====================
 
 /**
@@ -148,10 +99,10 @@ app.get('/', (req, res) => {
     
     // Telegram Integration Status
     telegram_integration: {
-      webhook_endpoint: '/webhook',
-      bot_mode: 'webhook',
-      polling_disabled: true,
-      webhook_ready: true
+      bot_mode: 'polling',
+      webhook_disabled: true,
+      polling_active: true,
+      status: '✅ Bot running independently'
     },
     
     // Complete API Documentation
@@ -160,7 +111,6 @@ app.get('/', (req, res) => {
       health: 'GET /api/health',
       database: 'GET /api/test-db',
       ping: 'GET /ping',
-      webhook: 'POST /webhook',
       
       // Authentication Flow
       auth: {
@@ -219,7 +169,7 @@ app.get('/', (req, res) => {
       performance: 'Sub-500ms response times',
       scalability: '1000+ concurrent users',
       compatibility: '100% frontend compatible',
-      bot_integration: 'Webhook mode (production ready)'
+      bot_integration: 'Polling mode (independent process)'
     }
   });
 });
@@ -260,10 +210,10 @@ app.get('/api/health', async (req, res) => {
     
     // Telegram Bot Status
     telegram_bot: {
-      mode: 'webhook',
-      webhook_endpoint: '/webhook',
-      polling_disabled: true,
-      status: '✅ Ready for webhook updates'
+      mode: 'polling',
+      webhook_disabled: true,
+      polling_active: true,
+      status: '✅ Running independently as separate process'
     },
     
     // Feature Status
@@ -272,7 +222,7 @@ app.get('/api/health', async (req, res) => {
       'Daily Progress Tracking': '✅ Active', 
       'Dynamic Leaderboard': '✅ Active',
       'Achievement System': '✅ Active',
-      'Telegram Bot Integration': '✅ Webhook Ready',
+      'Telegram Bot Integration': '✅ Polling Mode',
       'Real-time Statistics': '✅ Active',
       'Admin Approval System': '✅ Active',
       'Frontend Compatibility': '✅ 100%'
@@ -352,7 +302,7 @@ app.get('/ping', (req, res) => {
     server: 'yoldagilar-backend',
     version: '1.0.0',
     request_id: req.requestId,
-    webhook_ready: true
+    bot_mode: 'polling'
   });
 });
 
@@ -380,9 +330,9 @@ if (process.env.NODE_ENV !== 'production') {
       
       // Bot configuration
       bot_configuration: {
-        mode: 'webhook',
-        polling_disabled: true,
-        webhook_endpoint: '/webhook'
+        mode: 'polling',
+        webhook_disabled: true,
+        independent_process: true
       },
       
       frontend_compatible: true,
@@ -430,7 +380,6 @@ app.use((req, res) => {
       'GET /ping', 
       'GET /api/health',
       'GET /api/test-db',
-      'POST /webhook',
       'POST /api/auth/check',
       'GET /api/users/:userId/statistics',
       'POST /api/tasks/submit',
