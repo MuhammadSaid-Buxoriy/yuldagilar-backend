@@ -52,7 +52,7 @@ export class AchievementService {
     try {
       const progressHistory = await DatabaseService.getUserProgressHistory(
         tg_id,
-        30
+        60
       );
       const user = await DatabaseService.getUserByTelegramId(tg_id);
 
@@ -133,25 +133,90 @@ export class AchievementService {
   }
 
   /**
-   * Check perfectionist achievement (21 perfect days)
+   * Check perfectionist achievement (10/10 tasks for 21 consecutive days)
    */
   static async checkPerfectionistAchievement(progressHistory) {
-    const perfectDays = progressHistory.filter(
-      (day) => day.total_points === 10
-    ).length;
-    return perfectDays >= 21;
+    let streak = 0;
+
+    const today = new Date();
+    for (let i = 0; i < progressHistory.length; i++) {
+      const expectedDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const day = progressHistory.find((p) => p.date === expectedDate);
+
+      if (day) {
+        const tasksCompleted = Array.from(
+          { length: 10 },
+          (_, idx) => day[`shart_${idx + 1}`]
+        );
+        const allCompleted = tasksCompleted.every(
+          (val) => val === 1 || val === true
+        );
+
+        if (allCompleted) {
+          streak++;
+          if (streak >= 21) return true;
+        } else {
+          streak = 0;
+        }
+      } else {
+        streak = 0;
+      }
+    }
+
+    return false;
   }
 
   /**
-   * Check early bird achievement (task 9 completed 21 times)
+   * Check early bird achievement (task 9 completed 21 consecutive days)
    */
   static async checkEarlyBirdAchievement(progressHistory) {
-    // This would need additional data about specific task completion
-    // For now, approximate based on high activity
-    const earlyDays = progressHistory.filter(
-      (day) => day.total_points >= 8
-    ).length;
-    return earlyDays >= 21;
+    let streak = 0;
+    const today = new Date();
+
+    for (let i = 0; i < progressHistory.length; i++) {
+      const expectedDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const day = progressHistory.find((p) => p.date === expectedDate);
+
+      if (day && day.shart_9 === 1) {
+        streak++;
+        if (streak >= 21) return true;
+      } else {
+        streak = 0; // uzildi - qaytadan boshlaymiz
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get current early bird streak (consecutive days task 9 completed)
+   */
+  static async getEarlyBirdProgress(progressHistory) {
+    let streak = 0;
+
+    for (let i = 0; i < 60; i++) {
+      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const day = progressHistory.find((p) => p.date === targetDate);
+
+      if (day && day.shart_9 === 1) {
+        streak++;
+      } else {
+        break; // uzildi
+      }
+
+      if (streak >= 21) break;
+    }
+
+    return streak;
   }
 
   /**
@@ -161,7 +226,7 @@ export class AchievementService {
     try {
       const progressHistory = await DatabaseService.getUserProgressHistory(
         tg_id,
-        30
+        60
       );
       const user = await DatabaseService.getUserByTelegramId(tg_id);
 
@@ -198,9 +263,13 @@ export class AchievementService {
             maxProgress = 100;
             break;
           case "perfectionist":
-            currentProgress = progressHistory.filter(
-              (day) => day.total_points === 10
-            ).length;
+            currentProgress = await this.getPerfectionistStreak(
+              progressHistory
+            );
+            maxProgress = 21;
+            break;
+          case "early_bird":
+            currentProgress = await this.getEarlyBirdProgress(progressHistory);
             maxProgress = 21;
             break;
         }

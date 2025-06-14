@@ -194,7 +194,7 @@ export class DatabaseService {
   /**
    * Get user progress history
    */
-  static async getUserProgressHistory(tg_id, days = 30) {
+  static async getUserProgressHistory(tg_id, days = 60) {
     try {
       const { data, error } = await supabase
         .from('daily_progress')

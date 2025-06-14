@@ -1,19 +1,20 @@
 -- =====================================================
--- YOLDAGILAR DATABASE SCHEMA - PRODUCTION READY
+-- YOLDAGILAR DATABASE SCHEMA - XATOLAR TUZATILDI
 -- =====================================================
--- Fixed IMMUTABLE function errors
--- Removed fake data for clean production start
+-- ✅ IMMUTABLE function xatolari tuzatildi
+-- ✅ Barcha indexlar ishlatish mumkin
+-- ✅ Frontend uchun optimallashtirildi
 
 -- =====================================================
--- 1. USERS TABLE - Single name field (Frontend requirement)
+-- 1. USERS TABLE - Single name field
 -- =====================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     tg_id BIGINT UNIQUE NOT NULL,
     
-    -- ✅ CRITICAL: Single name field (Frontend expects this)
+    -- ✅ Frontend requirement: Single name field
     name VARCHAR(200) NOT NULL,           -- "Muhammad Said Buxoriy"
-    username VARCHAR(100),                -- "muhammadsaid_dev" (nullable)
+    username VARCHAR(100),                -- "muhammadsaid_dev"
     photo_url TEXT,                       -- User profile photo URL
     
     -- Registration & Approval Flow
@@ -29,14 +30,14 @@ CREATE TABLE users (
 );
 
 -- Performance Indexes for Users
-CREATE INDEX idx_users_tg_id ON users(tg_id);
-CREATE INDEX idx_users_approved ON users(is_approved) WHERE is_approved = true;
-CREATE INDEX idx_users_registration ON users(is_registered, is_approved);
+CREATE INDEX IF NOT EXISTS idx_users_tg_id ON users(tg_id);
+CREATE INDEX IF NOT EXISTS idx_users_approved ON users(is_approved) WHERE is_approved = true;
+CREATE INDEX IF NOT EXISTS idx_users_registration ON users(is_registered, is_approved);
 
 -- =====================================================
 -- 2. DAILY PROGRESS TABLE - Core functionality
 -- =====================================================
-CREATE TABLE daily_progress (
+CREATE TABLE IF NOT EXISTS daily_progress (
     id SERIAL PRIMARY KEY,
     tg_id BIGINT NOT NULL,
     date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -53,11 +54,11 @@ CREATE TABLE daily_progress (
     shart_9 INTEGER DEFAULT 0 CHECK (shart_9 IN (0,1)),
     shart_10 INTEGER DEFAULT 0 CHECK (shart_10 IN (0,1)),
     
-    -- Additional Metrics (Frontend requirement)
+    -- Additional Metrics
     pages_read INTEGER DEFAULT 0 CHECK (pages_read >= 0),
     distance_km DECIMAL(10,2) DEFAULT 0 CHECK (distance_km >= 0),
     
-    -- Auto-calculated total points (Frontend expects this)
+    -- Auto-calculated total points
     total_points INTEGER GENERATED ALWAYS AS (
         shart_1 + shart_2 + shart_3 + shart_4 + shart_5 + 
         shart_6 + shart_7 + shart_8 + shart_9 + shart_10
@@ -72,36 +73,34 @@ CREATE TABLE daily_progress (
     FOREIGN KEY (tg_id) REFERENCES users(tg_id) ON DELETE CASCADE
 );
 
--- Critical Performance Indexes for Daily Progress
-CREATE INDEX idx_progress_tg_id ON daily_progress(tg_id);
-CREATE INDEX idx_progress_date ON daily_progress(date DESC);
-CREATE INDEX idx_progress_points ON daily_progress(total_points DESC);
-CREATE INDEX idx_progress_composite ON daily_progress(tg_id, date DESC);
-
 -- =====================================================
--- 3. FIXED WEEKLY PERFORMANCE INDEX
+-- 3. SIMPLE PERFORMANCE INDEXES (NO FUNCTION DEPENDENCY)
 -- =====================================================
--- Create IMMUTABLE function for date comparison
-CREATE OR REPLACE FUNCTION is_recent_date(check_date DATE)
-RETURNS BOOLEAN
-LANGUAGE SQL
-IMMUTABLE
-AS $$
-    SELECT check_date >= '2024-01-01'::DATE  -- Always true for recent dates
-$$;
+-- Basic indexes without function dependencies
+CREATE INDEX IF NOT EXISTS idx_progress_tg_id ON daily_progress(tg_id);
+CREATE INDEX IF NOT EXISTS idx_progress_date ON daily_progress(date DESC);
+CREATE INDEX IF NOT EXISTS idx_progress_points ON daily_progress(total_points DESC);
+CREATE INDEX IF NOT EXISTS idx_progress_composite ON daily_progress(tg_id, date DESC);
 
--- Now create the conditional index using IMMUTABLE function
-CREATE INDEX idx_progress_weekly ON daily_progress(date, total_points DESC) 
-    WHERE is_recent_date(date);
+-- For recent data queries (simple date comparison)
+CREATE INDEX IF NOT EXISTS idx_progress_recent ON daily_progress(date DESC, total_points DESC);
 
--- Alternative: Simple unconditional index (more reliable)
-CREATE INDEX idx_progress_recent ON daily_progress(date DESC, total_points DESC);
+-- For leaderboard queries (no WHERE clause with functions)
+CREATE INDEX IF NOT EXISTS idx_leaderboard_daily ON daily_progress(date, total_points DESC);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_weekly ON daily_progress(date, total_points);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_alltime ON daily_progress(tg_id, total_points DESC);
+
+-- For today's leaderboard
+CREATE INDEX IF NOT EXISTS idx_leaderboard_today ON daily_progress(total_points DESC, tg_id);
 
 -- =====================================================
 -- 4. USER STATISTICS VIEW - Frontend Compatible
 -- =====================================================
--- This view provides all statistics that frontend needs
-CREATE OR REPLACE VIEW user_statistics AS
+-- Drop existing view if exists
+DROP VIEW IF EXISTS user_statistics;
+
+-- Create optimized view
+CREATE VIEW user_statistics AS
 SELECT 
     u.tg_id,
     u.name,
@@ -111,13 +110,14 @@ SELECT
     u.is_approved,
     u.achievements,
     u.created_at,
+    u.updated_at,
     
     -- TODAY STATISTICS
     COALESCE(today.total_points, 0) as daily_points,
     COALESCE(today.pages_read, 0) as daily_pages,
     COALESCE(today.distance_km, 0) as daily_distance,
     
-    -- WEEKLY STATISTICS (Last 7 days)
+    -- WEEKLY STATISTICS (Last 7 days including today)
     COALESCE(weekly.weekly_points, 0) as weekly_points,
     COALESCE(weekly.weekly_pages, 0) as weekly_pages,
     COALESCE(weekly.weekly_distance, 0) as weekly_distance,
@@ -141,7 +141,7 @@ LEFT JOIN (
     WHERE date = CURRENT_DATE
 ) today ON u.tg_id = today.tg_id
 
--- WEEKLY DATA (Last 7 days)
+-- WEEKLY DATA (Last 7 days including today)
 LEFT JOIN (
     SELECT 
         tg_id,
@@ -150,6 +150,7 @@ LEFT JOIN (
         SUM(distance_km) as weekly_distance
     FROM daily_progress 
     WHERE date >= CURRENT_DATE - INTERVAL '6 days'
+      AND date <= CURRENT_DATE
     GROUP BY tg_id
 ) weekly ON u.tg_id = weekly.tg_id
 
@@ -167,21 +168,11 @@ LEFT JOIN (
 
 WHERE u.is_approved = true;  -- Only approved users
 
--- Index for the view
-CREATE INDEX idx_user_statistics_tg_id ON users(tg_id) WHERE is_approved = true;
+-- Index for view performance
+CREATE INDEX IF NOT EXISTS idx_user_statistics_base ON users(tg_id) WHERE is_approved = true;
 
 -- =====================================================
--- 5. LEADERBOARD OPTIMIZATION INDEXES
--- =====================================================
-
--- For daily leaderboard (simple and fast)
-CREATE INDEX idx_leaderboard_daily ON daily_progress(date, total_points DESC);
-
--- For all-time leaderboard (composite)
-CREATE INDEX idx_leaderboard_alltime ON daily_progress(tg_id, total_points DESC);
-
--- =====================================================
--- 6. HELPER FUNCTIONS FOR FRONTEND
+-- 5. HELPER FUNCTIONS FOR FRONTEND
 -- =====================================================
 
 -- Function to get user rank in leaderboard
@@ -191,29 +182,102 @@ CREATE OR REPLACE FUNCTION get_user_rank(
     metric_type VARCHAR DEFAULT 'overall'
 ) RETURNS INTEGER AS $$
 DECLARE
-    user_rank INTEGER;
+    user_rank INTEGER := 0;
 BEGIN
     -- Weekly overall ranking
     IF period_type = 'weekly' AND metric_type = 'overall' THEN
-        SELECT rank() OVER (ORDER BY weekly_points DESC, tg_id ASC) 
-        INTO user_rank
-        FROM user_statistics 
-        WHERE tg_id = user_tg_id;
+        SELECT COALESCE(sub.rank, 0) INTO user_rank
+        FROM (
+            SELECT tg_id, 
+                   RANK() OVER (ORDER BY weekly_points DESC, tg_id ASC) as rank
+            FROM user_statistics 
+            WHERE weekly_points > 0
+        ) sub
+        WHERE sub.tg_id = user_tg_id;
         
     -- Daily ranking
     ELSIF period_type = 'daily' AND metric_type = 'overall' THEN
-        SELECT rank() OVER (ORDER BY daily_points DESC, tg_id ASC)
-        INTO user_rank
-        FROM user_statistics 
-        WHERE tg_id = user_tg_id;
+        SELECT COALESCE(sub.rank, 0) INTO user_rank
+        FROM (
+            SELECT tg_id,
+                   RANK() OVER (ORDER BY daily_points DESC, tg_id ASC) as rank
+            FROM user_statistics 
+            WHERE daily_points > 0
+        ) sub
+        WHERE sub.tg_id = user_tg_id;
         
     -- All time ranking
     ELSIF period_type = 'all_time' AND metric_type = 'overall' THEN
-        SELECT rank() OVER (ORDER BY total_points DESC, tg_id ASC)
-        INTO user_rank
-        FROM user_statistics 
-        WHERE tg_id = user_tg_id;
+        SELECT COALESCE(sub.rank, 0) INTO user_rank
+        FROM (
+            SELECT tg_id,
+                   RANK() OVER (ORDER BY total_points DESC, tg_id ASC) as rank
+            FROM user_statistics 
+            WHERE total_points > 0
+        ) sub
+        WHERE sub.tg_id = user_tg_id;
         
+    -- Reading rankings
+    ELSIF metric_type = 'reading' THEN
+        IF period_type = 'weekly' THEN
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY weekly_pages DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE weekly_pages > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        ELSIF period_type = 'daily' THEN
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY daily_pages DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE daily_pages > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        ELSE
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY total_pages DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE total_pages > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        END IF;
+        
+    -- Distance rankings
+    ELSIF metric_type = 'distance' THEN
+        IF period_type = 'weekly' THEN
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY weekly_distance DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE weekly_distance > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        ELSIF period_type = 'daily' THEN
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY daily_distance DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE daily_distance > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        ELSE
+            SELECT COALESCE(sub.rank, 0) INTO user_rank
+            FROM (
+                SELECT tg_id,
+                       RANK() OVER (ORDER BY total_distance DESC, tg_id ASC) as rank
+                FROM user_statistics 
+                WHERE total_distance > 0
+            ) sub
+            WHERE sub.tg_id = user_tg_id;
+        END IF;
     END IF;
     
     RETURN COALESCE(user_rank, 0);
@@ -221,7 +285,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================
--- 7. DATA TRIGGERS FOR CONSISTENCY
+-- 6. DATA TRIGGERS FOR CONSISTENCY
 -- =====================================================
 
 -- Update user updated_at on changes
@@ -233,6 +297,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop trigger if exists, then create
+DROP TRIGGER IF EXISTS trigger_users_updated_at ON users;
 CREATE TRIGGER trigger_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
@@ -247,84 +313,53 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop trigger if exists, then create
+DROP TRIGGER IF EXISTS trigger_progress_updated_at ON daily_progress;
 CREATE TRIGGER trigger_progress_updated_at
     BEFORE UPDATE ON daily_progress
     FOR EACH ROW
     EXECUTE FUNCTION update_progress_timestamp();
 
 -- =====================================================
--- 8. ADMIN USER SETUP (Replace with your actual data)
+-- 7. ADMIN USER SETUP 
 -- =====================================================
-
--- Create your admin user - REPLACE WITH YOUR ACTUAL TELEGRAM ID & NAME
--- INSERT INTO users (tg_id, name, username, is_registered, is_approved, achievements) 
--- VALUES (YOUR_TELEGRAM_ID, 'Your Full Name', 'your_username', true, true, ARRAY['admin'])
--- ON CONFLICT (tg_id) DO NOTHING;
-
--- Example (commented out - replace with your data):
--- INSERT INTO users (tg_id, name, username, is_registered, is_approved, achievements) 
--- VALUES (1176941228, 'Admin User', 'admin_username', true, true, ARRAY['admin'])
--- ON CONFLICT (tg_id) DO NOTHING;
+-- Your admin user (replace with correct data)
+INSERT INTO users (tg_id, name, username, is_registered, is_approved, achievements) 
+VALUES (1176941228, 'Muhammad Said Admin', 'muhammadsaid_buxoriy', true, true, ARRAY['admin'])
+ON CONFLICT (tg_id) DO UPDATE SET
+    is_approved = true,
+    achievements = EXCLUDED.achievements,
+    updated_at = NOW();
 
 -- =====================================================
--- 9. PERFORMANCE MONITORING QUERIES
+-- 8. TEST QUERIES (for verification)
 -- =====================================================
 
--- Check database performance (uncomment to use)
--- SELECT schemaname, tablename, attname, n_distinct, correlation
--- FROM pg_stats 
--- WHERE schemaname = 'public' AND tablename IN ('users', 'daily_progress');
-
--- Monitor index usage (uncomment to use)
--- SELECT schemaname, tablename, indexname, idx_scan, idx_tup_read, idx_tup_fetch
--- FROM pg_stat_user_indexes 
--- WHERE schemaname = 'public';
-
--- =====================================================
--- 10. VERIFICATION QUERIES (for testing)
--- =====================================================
-
--- Test user statistics view (uncomment to test)
+-- Test user statistics view
 -- SELECT * FROM user_statistics LIMIT 5;
 
--- Test leaderboard query (uncomment to test)
+-- Test leaderboard query
 -- SELECT tg_id, name, weekly_points, 
---        rank() OVER (ORDER BY weekly_points DESC, tg_id ASC) as rank
+--        RANK() OVER (ORDER BY weekly_points DESC, tg_id ASC) as rank
 -- FROM user_statistics 
 -- WHERE weekly_points > 0
 -- ORDER BY weekly_points DESC 
 -- LIMIT 10;
 
--- Count total users
+-- Count users
 -- SELECT COUNT(*) as total_users, 
---        COUNT(*) FILTER (WHERE is_approved = true) as approved_users,
---        COUNT(*) FILTER (WHERE is_approved = false) as pending_users
+--        COUNT(*) FILTER (WHERE is_approved = true) as approved_users
 -- FROM users;
 
 -- =====================================================
--- 11. CLEANUP COMMANDS (if needed)
--- =====================================================
-
--- If you need to reset the database (DANGER - deletes all data!)
--- DROP VIEW IF EXISTS user_statistics CASCADE;
--- DROP TABLE IF EXISTS daily_progress CASCADE;
--- DROP TABLE IF EXISTS users CASCADE;
--- DROP FUNCTION IF EXISTS get_user_rank(BIGINT, VARCHAR, VARCHAR);
--- DROP FUNCTION IF EXISTS is_recent_date(DATE);
--- DROP FUNCTION IF EXISTS update_user_timestamp();
--- DROP FUNCTION IF EXISTS update_progress_timestamp();
-
--- =====================================================
--- PRODUCTION READY SCHEMA! 🚀
+-- XATOLAR TUZATILDI! 🚀
 -- =====================================================
 -- 
--- ✅ Fixed IMMUTABLE function errors
--- ✅ Removed fake test data
--- ✅ Added proper indexes for performance
--- ✅ Frontend compatible structure
--- ✅ Admin user setup template
--- ✅ Performance monitoring queries
--- ✅ Cleanup commands for reset if needed
+-- ✅ IMMUTABLE function xatolari yo'q
+-- ✅ Barcha indexlar oddiy va tez
+-- ✅ View optimallashtirildi
+-- ✅ Triggerlar ishlaydi
+-- ✅ Admin user qo'shildi
 --
--- READY FOR DEPLOYMENT!
+-- ISHLATISHGA TAYYOR!
 -- =====================================================

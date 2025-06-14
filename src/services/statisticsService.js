@@ -73,7 +73,7 @@ export class StatisticsService {
    */
   static async calculateUserStreak(tg_id) {
     try {
-      const progressHistory = await DatabaseService.getUserProgressHistory(tg_id, 30);
+      const progressHistory = await DatabaseService.getUserProgressHistory(tg_id, 60);
       
       let streak = 0;
       for (let i = 0; i < progressHistory.length; i++) {
