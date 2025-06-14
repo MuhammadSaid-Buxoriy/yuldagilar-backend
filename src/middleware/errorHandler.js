@@ -108,17 +108,18 @@ export const notFoundHandler = (req, res) => {
 
   res.status(404).json({
     success: false,
-    error: 'Route not found',
+    error: "Route not found",
     message: `Cannot ${req.method} ${req.path}`,
     timestamp: new Date().toISOString(),
     availableEndpoints: [
-      'GET /',
-      'GET /api/health',
-      'POST /api/auth/check',
-      'GET /api/users/:userId/statistics',
-      'POST /api/tasks/submit',
-      'GET /api/leaderboard'
-    ]
+      "GET /",
+      "GET /api/health",
+      "POST /api/auth/check",
+      "GET /api/users/:userId/statistics",
+      "GET /api/users/:userId/achievements/progress",
+      "POST /api/tasks/submit",
+      "GET /api/leaderboard",
+    ],
   });
 };
 

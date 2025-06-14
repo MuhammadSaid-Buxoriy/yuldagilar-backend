@@ -85,92 +85,94 @@ app.use((req, res, next) => {
  */
 app.get('/', (req, res) => {
   res.json({
-    name: 'Yoldagilar Challenge API',
-    version: '1.0.0',
-    status: 'operational',
+    name: "Yoldagilar Challenge API",
+    version: "1.0.0",
+    status: "operational",
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    description: 'Professional backend API for Yoldagilar daily challenge platform',
-    
+    environment: process.env.NODE_ENV || "development",
+    description:
+      "Professional backend API for Yoldagilar daily challenge platform",
+
     // Frontend Compatibility Information
     frontend_compatible: true,
-    real_time_polling: '15 seconds',
-    response_format: 'JSON with success/error flags',
-    
+    real_time_polling: "15 seconds",
+    response_format: "JSON with success/error flags",
+
     // Telegram Integration Status
     telegram_integration: {
-      bot_mode: 'polling',
+      bot_mode: "polling",
       webhook_disabled: true,
       polling_active: true,
-      status: '✅ Bot running independently'
+      status: "✅ Bot running independently",
     },
-    
+
     // Complete API Documentation
     endpoints: {
       // Health & Info
-      health: 'GET /api/health',
-      database: 'GET /api/test-db',
-      ping: 'GET /ping',
-      
+      health: "GET /api/health",
+      database: "GET /api/test-db",
+      ping: "GET /ping",
+
       // Authentication Flow
       auth: {
-        check: 'POST /api/auth/check',           // Frontend format: {userId}
-        register: 'POST /api/auth/register',     // Bot registration
-        approve: 'POST /api/auth/approve/:tg_id', // Admin approval
-        reject: 'POST /api/auth/reject/:tg_id'   // Admin rejection
+        check: "POST /api/auth/check", // Frontend format: {userId}
+        register: "POST /api/auth/register", // Bot registration
+        approve: "POST /api/auth/approve/:tg_id", // Admin approval
+        reject: "POST /api/auth/reject/:tg_id", // Admin rejection
       },
-      
+
       // User Management
       users: {
-        statistics: 'GET /api/users/:userId/statistics', // Daily/weekly/all-time
-        profile: 'GET /api/users/:userId'                // Complete profile
+        statistics: "GET /api/users/:userId/achievements/progress", // Daily/weekly/all-time
+        statistics: "GET /api/users/:userId/statistics", // Daily/weekly/all-time
+        profile: "GET /api/users/:userId", // Complete profile
       },
-      
+
       // Task Management
       tasks: {
-        submit: 'POST /api/tasks/submit',        // Submit daily progress
-        daily: 'GET /api/tasks/daily/:userId',   // Get daily tasks
-        complete: 'POST /api/tasks/complete [DEPRECATED]' // Legacy endpoint
+        submit: "POST /api/tasks/submit", // Submit daily progress
+        daily: "GET /api/tasks/daily/:userId", // Get daily tasks
+        complete: "POST /api/tasks/complete [DEPRECATED]", // Legacy endpoint
       },
-      
+
       // Leaderboard System
       leaderboard: {
-        main: 'GET /api/leaderboard?period=weekly&type=overall&limit=100',
-        weekly_stats: 'GET /api/leaderboard/stats/weekly/:userId'
-      }
+        main: "GET /api/leaderboard?period=weekly&type=overall&limit=100",
+        weekly_stats: "GET /api/leaderboard/stats/weekly/:userId",
+      },
     },
-    
+
     // Frontend Integration Details
     frontend_integration: {
-      api_base_url: `${req.protocol}://${req.get('host')}/api`,
+      api_base_url: `${req.protocol}://${req.get("host")}/api`,
       polling_endpoints: [
-        '/api/users/:userId/statistics',
-        '/api/leaderboard?period=weekly'
+        "/api/users/:userId/statistics",
+        "/api/leaderboard?period=weekly",
       ],
       authentication_flow: [
-        '1. User opens mini app',
-        '2. POST /api/auth/check with Telegram user ID',
-        '3. If not registered: Bot registration flow',
-        '4. If not approved: Wait for admin approval',
-        '5. If approved: Access granted to app'
+        "1. User opens mini app",
+        "2. POST /api/auth/check with Telegram user ID",
+        "3. If not registered: Bot registration flow",
+        "4. If not approved: Wait for admin approval",
+        "5. If approved: Access granted to app",
       ],
       required_data_format: {
-        user_auth: '{ userId: number }',
-        task_submit: '{ tg_id, name, shart_1..10, pages_read, distance_km }',
-        response_format: '{ success: boolean, message?: string, ...data }'
-      }
+        user_auth: "{ userId: number }",
+        task_submit: "{ tg_id, name, shart_1..10, pages_read, distance_km }",
+        response_format: "{ success: boolean, message?: string, ...data }",
+      },
     },
-    
+
     // Technical Specifications
     technical_specs: {
-      database: 'Supabase PostgreSQL',
-      authentication: 'Telegram WebApp + Admin approval',
-      real_time: 'Frontend polling (15s intervals)',
-      performance: 'Sub-500ms response times',
-      scalability: '1000+ concurrent users',
-      compatibility: '100% frontend compatible',
-      bot_integration: 'Polling mode (independent process)'
-    }
+      database: "Supabase PostgreSQL",
+      authentication: "Telegram WebApp + Admin approval",
+      real_time: "Frontend polling (15s intervals)",
+      performance: "Sub-500ms response times",
+      scalability: "1000+ concurrent users",
+      compatibility: "100% frontend compatible",
+      bot_integration: "Polling mode (independent process)",
+    },
   });
 });
 
@@ -369,25 +371,26 @@ app.use('/api/stats/weekly/:userId', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Route not found',
+    error: "Route not found",
     message: `Cannot ${req.method} ${req.path}`,
     timestamp: new Date().toISOString(),
     request_id: req.requestId,
-    
+
     // Helpful suggestions
     available_endpoints: [
-      'GET /',
-      'GET /ping', 
-      'GET /api/health',
-      'GET /api/test-db',
-      'POST /api/auth/check',
-      'GET /api/users/:userId/statistics',
-      'POST /api/tasks/submit',
-      'GET /api/leaderboard'
+      "GET /",
+      "GET /ping",
+      "GET /api/health",
+      "GET /api/test-db",
+      "POST /api/auth/check",
+      "GET /api/users/:userId/statistics",
+      "GET /api/users/:userId/achievements/progress",
+      "POST /api/tasks/submit",
+      "GET /api/leaderboard",
     ],
-    
-    documentation: 'Visit / for complete API documentation',
-    support: 'Check endpoint spelling and method type'
+
+    documentation: "Visit / for complete API documentation",
+    support: "Check endpoint spelling and method type",
   });
 });
 
