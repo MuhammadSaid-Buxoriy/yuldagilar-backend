@@ -130,19 +130,18 @@ export const getDailyTasks = async (req, res) => {
     }
 
     // Get today's progress
+    const today = new Date().toISOString().split('T')[0];
     const { data: progress, error: progressError } = await supabase
       .from('daily_progress')
       .select('*')
       .eq('tg_id', telegramId)
-      .eq('date', new Date().toISOString().split('T')[0])
+      .eq('date', today)
       .single();
 
     if (progressError && progressError.code !== 'PGRST116') {
       console.error('Error getting daily progress:', progressError);
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    
     // ✅ FIXED: Task configuration matching frontend exactly
     const TASKS_CONFIG = [
       { id: 1, title: "Kunlik vird", description: "Zikr, Qur'on tilovati, ibodat", points: 50, category: "prayer", icon: "🕌", difficulty: "easy" },
@@ -157,7 +156,7 @@ export const getDailyTasks = async (req, res) => {
       { id: 10, title: "Sport/Mashqlar", description: "Yugurish yoki mashqlar", points: 50, category: "sport", icon: "🏃‍♂️", difficulty: "medium" }
     ];
 
-    // ✅ FIXED: Map progress to tasks with completion status
+    // ✅ ASOSIY TUZATISH: Har bir vazifa uchun completion holatini ko'rsatish
     const tasks = TASKS_CONFIG.map(task => ({
       ...task,
       completed: progress ? Boolean(progress[`shart_${task.id}`]) : false,
@@ -166,7 +165,7 @@ export const getDailyTasks = async (req, res) => {
 
     const completedCount = progress ? progress.total_points : 0;
 
-    // ✅ FIXED: Response format exactly as frontend expects
+    // ✅ TUZATILDI: Frontend kutayotgan format (today property qo'shildi)
     const response = {
       success: true,
       date: today,
@@ -178,8 +177,21 @@ export const getDailyTasks = async (req, res) => {
       completionPercentage: Math.round((completedCount / 10) * 100),
       // Additional stats
       pages_read: progress?.pages_read || 0,
-      distance_km: parseFloat(progress?.distance_km) || 0
+      distance_km: parseFloat(progress?.distance_km) || 0,
+      // ✅ FRONTEND UCHUN: today property qo'shildi
+      today: {
+        completed: completedCount,
+        pages_read: progress?.pages_read || 0,
+        distance_km: parseFloat(progress?.distance_km) || 0
+      }
     };
+
+    console.log(`✅ Daily tasks sent for user ${telegramId}:`, {
+      completed: completedCount,
+      total: 10,
+      date: today,
+      tasksWithCompletion: tasks.filter(t => t.completed).length
+    });
 
     return res.json(response);
 
@@ -299,8 +311,16 @@ export const submitDailyProgress = async (req, res) => {
       console.error('Achievement update failed (non-critical):', error);
     });
 
+    console.log(`✅ Progress saved for user ${telegramId}:`, {
+      date: progress.date,
+      total_points: progress.total_points,
+      pages_read: progress.pages_read,
+      distance_km: progress.distance_km
+    });
+
     // ✅ FIXED: Return response in format frontend expects
     const response = {
+      success: true,
       totalPoints: progress.total_points,
       message: `Ma'lumotlar muvaffaqiyatli saqlandi! ${progress.total_points}/10 vazifa bajarildi.`,
       progress: {

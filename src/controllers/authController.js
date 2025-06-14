@@ -1,5 +1,5 @@
 // =====================================================
-// AUTH CONTROLLER - Frontend Compatible FIXED
+// AUTH CONTROLLER - Frontend Compatible + Photo Update
 // =====================================================
 import supabase from '../config/database.js';
 import { sendSuccess, sendError, sendNotFound, sendServerError } from '../utils/responses.js';
@@ -171,6 +171,58 @@ export const registerUser = async (req, res) => {
 
   } catch (error) {
     console.error('Error in registerUser:', error);
+    return sendServerError(res, error);
+  }
+};
+
+/**
+ * ✅ YANGI FUNKSIYA: Profil rasmini yangilash
+ * PUT /auth/update-photo/:userId
+ */
+export const updateUserPhoto = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { photo_url } = req.body;
+    
+    const telegramId = parseInt(userId);
+    if (!telegramId || telegramId <= 0) {
+      return sendError(res, 'Invalid userId', 400);
+    }
+
+    // Update user photo in database
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({ 
+        photo_url: photo_url || null,
+        updated_at: new Date().toISOString() 
+      })
+      .eq('tg_id', telegramId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Database error in updateUserPhoto:', error);
+      return sendServerError(res, error);
+    }
+
+    if (!user) {
+      return sendNotFound(res, 'User not found');
+    }
+
+    console.log(`✅ Photo updated for user ${telegramId}:`, photo_url ? 'New photo' : 'Photo removed');
+
+    return sendSuccess(res, {
+      user: {
+        tg_id: user.tg_id,
+        name: user.name,
+        username: user.username,
+        photo_url: user.photo_url,
+        updated_at: user.updated_at
+      }
+    }, 'Photo updated successfully');
+
+  } catch (error) {
+    console.error('Error in updateUserPhoto:', error);
     return sendServerError(res, error);
   }
 };

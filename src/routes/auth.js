@@ -1,10 +1,10 @@
 // =====================================================
-// AUTHENTICATION ROUTES - Frontend Compatible
+// AUTHENTICATION ROUTES - Frontend Compatible + Photo Update
 // =====================================================
 // File: src/routes/auth.js
 
 import express from 'express';
-import { checkUserAuth, registerUser, approveUser, rejectUser } from '../controllers/authController.js';
+import { checkUserAuth, registerUser, approveUser, rejectUser, updateUserPhoto } from '../controllers/authController.js';
 import { asyncHandler } from '../utils/responses.js';
 
 const router = express.Router();
@@ -28,6 +28,13 @@ router.post('/check', asyncHandler(checkUserAuth));
  * Body: { tg_id, name, username?, photo_url? }
  */
 router.post('/register', asyncHandler(registerUser));
+
+/**
+ * ✅ YANGI: Profil rasmini yangilash
+ * PUT /api/auth/update-photo/:userId
+ * Body: { photo_url: "https://..." }
+ */
+router.put('/update-photo/:userId', asyncHandler(updateUserPhoto));
 
 /**
  * Approve user by admin

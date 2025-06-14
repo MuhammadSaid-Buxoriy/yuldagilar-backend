@@ -1,5 +1,5 @@
 // =====================================================
-// TELEGRAM BOT - Polling Mode (Optimized)
+// TELEGRAM BOT - Polling Mode (Optimized with Photo Update)
 // =====================================================
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
@@ -155,22 +155,46 @@ async function rejectUser(tgId) {
 }
 
 /**
- * Get user profile photo URL
+ * ✅ TUZATILDI: Get user profile photo URL
  */
 async function getUserProfilePhoto(userId) {
   try {
+    console.log(`🔍 Getting profile photo for user ${userId}...`);
+    
     const photos = await bot.getUserProfilePhotos(userId, { limit: 1 });
     
     if (photos.photos && photos.photos.length > 0) {
       const fileId = photos.photos[0][0].file_id;
       const file = await bot.getFile(fileId);
-      return `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${file.file_path}`;
+      const photoUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${file.file_path}`;
+      
+      console.log(`✅ Profile photo found for user ${userId}: ${photoUrl}`);
+      return photoUrl;
+    } else {
+      console.log(`ℹ️ No profile photo found for user ${userId}`);
+      return null;
     }
-    
-    return null;
   } catch (error) {
-    console.error('Failed to get profile photo:', error);
+    console.error(`❌ Failed to get profile photo for user ${userId}:`, error.message);
     return null;
+  }
+}
+
+/**
+ * ✅ YANGI FUNKSIYA: Profil rasmini yangilash API orqali
+ */
+async function updateUserPhotoInAPI(tgId, photoUrl) {
+  try {
+    const response = await makeAPIRequest(`/auth/update-photo/${tgId}`, {
+      method: 'PUT',
+      body: { photo_url: photoUrl }
+    });
+    
+    console.log(`✅ Photo updated in API for user ${tgId}:`, response.success);
+    return response.success;
+  } catch (error) {
+    console.error(`❌ Failed to update photo in API for user ${tgId}:`, error);
+    return false;
   }
 }
 
@@ -199,7 +223,7 @@ setInterval(cleanOldSessions, 10 * 60 * 1000);
 // ==================== BOT MESSAGE HANDLERS ====================
 
 /**
- * Start command handler
+ * ✅ TUZATILDI: Start command - rasm yangilash bilan
  */
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
@@ -223,6 +247,15 @@ bot.onText(/\/start/, async (msg) => {
     }
 
     if (authStatus.isRegistered && authStatus.isApproved) {
+      // ✅ YANGI: Profil rasmini yangilash
+      console.log('🔄 Checking for profile photo update...');
+      const currentPhotoUrl = await getUserProfilePhoto(userId);
+      
+      // Faqat rasm mavjud bo'lsa yangilash
+      if (currentPhotoUrl) {
+        await updateUserPhotoInAPI(userId, currentPhotoUrl);
+      }
+
       // User is registered and approved
       await bot.sendMessage(chatId, 
         `✅ Xush kelibsiz, ${authStatus.user.name}!\n\n` +
@@ -275,6 +308,58 @@ bot.onText(/\/start/, async (msg) => {
     await bot.sendMessage(chatId, 
       `❌ Xatolik yuz berdi. Iltimos, biroz kutib qaytadan urinib ko'ring.\n` +
       `📞 Muammo davom etsa: @muhammadsaid_buxoriy`
+    );
+  }
+});
+
+/**
+ * ✅ YANGI COMMAND: Profil rasmini yangilash
+ */
+bot.onText(/\/update_photo/, async (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  try {
+    console.log(`🔄 Manual photo update requested by user ${userId}`);
+
+    // Check if user is registered and approved
+    const authStatus = await checkUserRegistration(userId);
+    
+    if (!authStatus.success || !authStatus.isRegistered || !authStatus.isApproved) {
+      await bot.sendMessage(chatId, 
+        `❌ Avval ro'yxatdan o'ting va tasdiqlashni kuting.`
+      );
+      return;
+    }
+
+    // Get current profile photo
+    const photoUrl = await getUserProfilePhoto(userId);
+    
+    if (photoUrl) {
+      // Update photo in API
+      const updateResult = await updateUserPhotoInAPI(userId, photoUrl);
+      
+      if (updateResult) {
+        await bot.sendMessage(chatId, 
+          `✅ Profil rasmingiz muvaffaqiyatli yangilandi!\n` +
+          `🔄 Mini App'ni qayta oching - yangi rasmingiz ko'rinadi.`
+        );
+      } else {
+        await bot.sendMessage(chatId, 
+          `❌ Rasmni yangilashda xatolik yuz berdi. Keyinroq qaytadan urinib ko'ring.`
+        );
+      }
+    } else {
+      await bot.sendMessage(chatId, 
+        `ℹ️ Telegram profilingizda rasm yo'q.\n` +
+        `📸 Avval Telegram profilingizga rasm qo'ying, keyin qaytadan urinib ko'ring.`
+      );
+    }
+
+  } catch (error) {
+    console.error('Update photo command error:', error);
+    await bot.sendMessage(chatId, 
+      `❌ Rasmni yangilashda xatolik yuz berdi.`
     );
   }
 });
