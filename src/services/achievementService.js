@@ -88,13 +88,13 @@ export class AchievementService {
   }
 
   /**
-   * Check consistent achievement (7 consecutive days)
+   * Check consistent achievement (21 consecutive days)
    */
   static async checkConsistentAchievement(progressHistory) {
     let consecutiveDays = 0;
     const today = new Date().toISOString().split("T")[0];
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 21; i++) {
       const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
@@ -107,43 +107,43 @@ export class AchievementService {
       }
     }
 
-    return consecutiveDays >= 7;
+    return consecutiveDays >= 21;
   }
 
   /**
-   * Check reader achievement (100+ pages total)
+   * Check reader achievement (10000+ pages total)
    */
   static async checkReaderAchievement(progressHistory) {
     const totalPages = progressHistory.reduce(
       (sum, day) => sum + (day.pages_read || 0),
       0
     );
-    return totalPages >= 100;
+    return totalPages >= 10000;
   }
 
   /**
-   * Check athlete achievement (50+ km total)
+   * Check athlete achievement (100+ km total)
    */
   static async checkAthleteAchievement(progressHistory) {
     const totalDistance = progressHistory.reduce(
       (sum, day) => sum + (day.distance_km || 0),
       0
     );
-    return totalDistance >= 50;
+    return totalDistance >= 100;
   }
 
   /**
-   * Check perfectionist achievement (3 perfect days)
+   * Check perfectionist achievement (21 perfect days)
    */
   static async checkPerfectionistAchievement(progressHistory) {
     const perfectDays = progressHistory.filter(
       (day) => day.total_points === 10
     ).length;
-    return perfectDays >= 3;
+    return perfectDays >= 21;
   }
 
   /**
-   * Check early bird achievement (task 9 completed 14 times)
+   * Check early bird achievement (task 9 completed 21 times)
    */
   static async checkEarlyBirdAchievement(progressHistory) {
     // This would need additional data about specific task completion
@@ -151,7 +151,7 @@ export class AchievementService {
     const earlyDays = progressHistory.filter(
       (day) => day.total_points >= 8
     ).length;
-    return earlyDays >= 14;
+    return earlyDays >= 21;
   }
 
   /**
@@ -181,27 +181,27 @@ export class AchievementService {
         switch (achievement.id) {
           case "consistent":
             currentProgress = await this.getConsistentProgress(progressHistory);
-            maxProgress = 7;
+            maxProgress = 21;
             break;
           case "reader":
             currentProgress = progressHistory.reduce(
               (sum, day) => sum + (day.pages_read || 0),
               0
             );
-            maxProgress = 100;
+            maxProgress = 10000;
             break;
           case "athlete":
             currentProgress = progressHistory.reduce(
               (sum, day) => sum + (day.distance_km || 0),
               0
             );
-            maxProgress = 50;
+            maxProgress = 100;
             break;
           case "perfectionist":
             currentProgress = progressHistory.filter(
               (day) => day.total_points === 10
             ).length;
-            maxProgress = 3;
+            maxProgress = 21;
             break;
         }
 
