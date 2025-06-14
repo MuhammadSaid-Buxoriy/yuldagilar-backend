@@ -35,7 +35,7 @@ router.get("/:userId/statistics", asyncHandler(getUserStatistics));
 router.get("/:userId", asyncHandler(getUserProfile));
 
 router.get(
-  "/users/:userId/achievements/progress",
+  "/:userId/achievements/progress",
   asyncHandler(getAchievementProgress)
 );
 
