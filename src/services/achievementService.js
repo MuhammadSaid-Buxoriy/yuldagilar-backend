@@ -1,48 +1,48 @@
-import { DatabaseService } from './databaseService.js';
-import logger from '../utils/logger.js';
+import { DatabaseService } from "./databaseService.js";
+import logger from "../utils/logger.js";
 
 export class AchievementService {
   static ACHIEVEMENT_DEFINITIONS = {
     consistent: {
-      id: 'consistent',
-      name: 'Doimiy faol',
-      description: '7 kun ketma-ket faol bo\'lish',
-      icon: '🔥',
-      color: '#ef4444',
-      checkFunction: 'checkConsistentAchievement'
+      id: "consistent",
+      name: "Faol",
+      description: "21 kun ketma-ket faol bo'lish",
+      icon: "🔥",
+      color: "#ef4444",
+      checkFunction: "checkConsistentAchievement",
     },
     reader: {
-      id: 'reader',
-      name: 'Kitobxon',
-      description: '100 bet kitob o\'qish',
-      icon: '📚',
-      color: '#3b82f6',
-      checkFunction: 'checkReaderAchievement'
+      id: "reader",
+      name: "Kitobxon",
+      description: "10,000 bet kitob o'qish",
+      icon: "📚",
+      color: "#3b82f6",
+      checkFunction: "checkReaderAchievement",
     },
     athlete: {
-      id: 'athlete',
-      name: 'Sportchi',
-      description: '50 km yugurish',
-      icon: '🏃‍♂️',
-      color: '#10b981',
-      checkFunction: 'checkAthleteAchievement'
+      id: "athlete",
+      name: "Sportchi",
+      description: "100 km yugurish",
+      icon: "🏃‍♂️",
+      color: "#10b981",
+      checkFunction: "checkAthleteAchievement",
     },
     perfectionist: {
-      id: 'perfectionist',
-      name: 'Mukammallikka intiluvchi',
-      description: '3 kun 10/10 vazifa bajarish',
-      icon: '⭐',
-      color: '#f59e0b',
-      checkFunction: 'checkPerfectionistAchievement'
+      id: "perfectionist",
+      name: "Olov",
+      description: "21 kun ketma-ket 10/10 vazifa bajarish",
+      icon: "⭐",
+      color: "#f59e0b",
+      checkFunction: "checkPerfectionistAchievement",
     },
     early_bird: {
-      id: 'early_bird',
-      name: 'Erta qo\'zg\'aluvchi',
-      description: '14 kun ketma-ket erta turish',
-      icon: '🌅',
-      color: '#8b5cf6',
-      checkFunction: 'checkEarlyBirdAchievement'
-    }
+      id: "early_bird",
+      name: "Uyg'oq",
+      description: "21 kun ketma-ket erta turish",
+      icon: "🌅",
+      color: "#8b5cf6",
+      checkFunction: "checkEarlyBirdAchievement",
+    },
   };
 
   /**
@@ -50,9 +50,12 @@ export class AchievementService {
    */
   static async updateUserAchievements(tg_id) {
     try {
-      const progressHistory = await DatabaseService.getUserProgressHistory(tg_id, 30);
+      const progressHistory = await DatabaseService.getUserProgressHistory(
+        tg_id,
+        30
+      );
       const user = await DatabaseService.getUserByTelegramId(tg_id);
-      
+
       if (!user || !progressHistory) {
         return [];
       }
@@ -74,12 +77,12 @@ export class AchievementService {
       // Update if new achievements earned
       if (newAchievements.length > currentAchievements.length) {
         await DatabaseService.updateUserAchievements(tg_id, newAchievements);
-        return newAchievements.filter(a => !currentAchievements.includes(a));
+        return newAchievements.filter((a) => !currentAchievements.includes(a));
       }
 
       return [];
     } catch (error) {
-      logger.error('Error in updateUserAchievements:', error);
+      logger.error("Error in updateUserAchievements:", error);
       return [];
     }
   }
@@ -89,12 +92,14 @@ export class AchievementService {
    */
   static async checkConsistentAchievement(progressHistory) {
     let consecutiveDays = 0;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
 
     for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const dayData = progressHistory.find(p => p.date === targetDate);
-      
+      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+      const dayData = progressHistory.find((p) => p.date === targetDate);
+
       if (dayData && dayData.total_points > 0) {
         consecutiveDays++;
       } else {
@@ -109,7 +114,10 @@ export class AchievementService {
    * Check reader achievement (100+ pages total)
    */
   static async checkReaderAchievement(progressHistory) {
-    const totalPages = progressHistory.reduce((sum, day) => sum + (day.pages_read || 0), 0);
+    const totalPages = progressHistory.reduce(
+      (sum, day) => sum + (day.pages_read || 0),
+      0
+    );
     return totalPages >= 100;
   }
 
@@ -117,7 +125,10 @@ export class AchievementService {
    * Check athlete achievement (50+ km total)
    */
   static async checkAthleteAchievement(progressHistory) {
-    const totalDistance = progressHistory.reduce((sum, day) => sum + (day.distance_km || 0), 0);
+    const totalDistance = progressHistory.reduce(
+      (sum, day) => sum + (day.distance_km || 0),
+      0
+    );
     return totalDistance >= 50;
   }
 
@@ -125,7 +136,9 @@ export class AchievementService {
    * Check perfectionist achievement (3 perfect days)
    */
   static async checkPerfectionistAchievement(progressHistory) {
-    const perfectDays = progressHistory.filter(day => day.total_points === 10).length;
+    const perfectDays = progressHistory.filter(
+      (day) => day.total_points === 10
+    ).length;
     return perfectDays >= 3;
   }
 
@@ -135,7 +148,9 @@ export class AchievementService {
   static async checkEarlyBirdAchievement(progressHistory) {
     // This would need additional data about specific task completion
     // For now, approximate based on high activity
-    const earlyDays = progressHistory.filter(day => day.total_points >= 8).length;
+    const earlyDays = progressHistory.filter(
+      (day) => day.total_points >= 8
+    ).length;
     return earlyDays >= 14;
   }
 
@@ -144,9 +159,12 @@ export class AchievementService {
    */
   static async getAchievementProgress(tg_id) {
     try {
-      const progressHistory = await DatabaseService.getUserProgressHistory(tg_id, 30);
+      const progressHistory = await DatabaseService.getUserProgressHistory(
+        tg_id,
+        30
+      );
       const user = await DatabaseService.getUserByTelegramId(tg_id);
-      
+
       if (!user || !progressHistory) {
         return [];
       }
@@ -161,20 +179,28 @@ export class AchievementService {
 
         // Calculate progress based on achievement type
         switch (achievement.id) {
-          case 'consistent':
+          case "consistent":
             currentProgress = await this.getConsistentProgress(progressHistory);
             maxProgress = 7;
             break;
-          case 'reader':
-            currentProgress = progressHistory.reduce((sum, day) => sum + (day.pages_read || 0), 0);
+          case "reader":
+            currentProgress = progressHistory.reduce(
+              (sum, day) => sum + (day.pages_read || 0),
+              0
+            );
             maxProgress = 100;
             break;
-          case 'athlete':
-            currentProgress = progressHistory.reduce((sum, day) => sum + (day.distance_km || 0), 0);
+          case "athlete":
+            currentProgress = progressHistory.reduce(
+              (sum, day) => sum + (day.distance_km || 0),
+              0
+            );
             maxProgress = 50;
             break;
-          case 'perfectionist':
-            currentProgress = progressHistory.filter(day => day.total_points === 10).length;
+          case "perfectionist":
+            currentProgress = progressHistory.filter(
+              (day) => day.total_points === 10
+            ).length;
             maxProgress = 3;
             break;
         }
@@ -184,13 +210,13 @@ export class AchievementService {
           earned,
           current: Math.min(currentProgress, maxProgress),
           max: maxProgress,
-          percentage: Math.min((currentProgress / maxProgress) * 100, 100)
+          percentage: Math.min((currentProgress / maxProgress) * 100, 100),
         });
       }
 
       return progress;
     } catch (error) {
-      logger.error('Error in getAchievementProgress:', error);
+      logger.error("Error in getAchievementProgress:", error);
       return [];
     }
   }
@@ -201,9 +227,11 @@ export class AchievementService {
   static async getConsistentProgress(progressHistory) {
     let consecutive = 0;
     for (let i = 0; i < progressHistory.length; i++) {
-      const expectedDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const dayData = progressHistory.find(p => p.date === expectedDate);
-      
+      const expectedDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+      const dayData = progressHistory.find((p) => p.date === expectedDate);
+
       if (dayData && dayData.total_points > 0) {
         consecutive++;
       } else {
