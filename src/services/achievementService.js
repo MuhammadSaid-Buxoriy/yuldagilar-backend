@@ -219,6 +219,37 @@ export class AchievementService {
     return streak;
   }
 
+  static async getPerfectionistStreak(progressHistory) {
+    let streak = 0;
+
+    for (let i = 0; i < 60; i++) {
+      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const day = progressHistory.find((p) => p.date === targetDate);
+      if (!day) {
+        streak = 0;
+        continue;
+      }
+
+      const allTasksCompleted = Array.from(
+        { length: 10 },
+        (_, idx) => day[`shart_${idx + 1}`]
+      ).every((val) => val === true || val === 1);
+
+      if (allTasksCompleted) {
+        streak++;
+      } else {
+        break;
+      }
+
+      if (streak >= 21) break;
+    }
+
+    return streak;
+  }
+
   /**
    * Get achievement progress for user
    */
