@@ -2,6 +2,7 @@
 // USER CONTROLLER - Frontend Compatible FIXED
 // =====================================================
 import supabase from "../config/database.js";
+import { AchievementService } from "../services/achievementService.js";
 import {
   sendSuccess,
   sendError,
