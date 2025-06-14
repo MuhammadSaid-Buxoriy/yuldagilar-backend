@@ -33,7 +33,7 @@ async function updateUserAchievements(tg_id) {
       
       if (dayData && dayData.total_points > 0) {
         consecutiveDays++;
-        if (consecutiveDays >= 7) {
+        if (consecutiveDays >= 21) {
           achievements.push('consistent');
           break;
         }
@@ -44,25 +44,25 @@ async function updateUserAchievements(tg_id) {
 
     // ✅ Check for "reader" achievement (100+ pages total)
     const totalPages = progressHistory.reduce((sum, day) => sum + (day.pages_read || 0), 0);
-    if (totalPages >= 100) {
+    if (totalPages >= 10000) {
       achievements.push('reader');
     }
 
     // ✅ Check for "athlete" achievement (50+ km total)
     const totalDistance = progressHistory.reduce((sum, day) => sum + (parseFloat(day.distance_km) || 0), 0);
-    if (totalDistance >= 50) {
+    if (totalDistance >= 100) {
       achievements.push('athlete');
     }
 
     // ✅ Check for "perfectionist" achievement (10/10 tasks for 3 days)
     const perfectDays = progressHistory.filter(day => day.total_points === 10).length;
-    if (perfectDays >= 3) {
+    if (perfectDays >= 21) {
       achievements.push('perfectionist');
     }
 
     // ✅ Check for "early_bird" achievement (high activity for 14 days)
     const highActivityDays = progressHistory.filter(day => day.total_points >= 8).length;
-    if (highActivityDays >= 14) {
+    if (highActivityDays >= 21) {
       achievements.push('early_bird');
     }
 
