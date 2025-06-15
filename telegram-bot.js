@@ -23,7 +23,7 @@ const CONFIG = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   ADMIN_ID: parseInt(process.env.ADMIN_ID),
   MINI_APP_URL: process.env.MINI_APP_URL || 'https://yuldagilar.vercel.app',
-  API_BASE_URL: process.env.API_BASE_URL || 'http://localhost:3000/api',
+  API_BASE_URL: process.env.API_BASE_URL || 'API_BASE_URL=https://yuldagilar-backend.onrender.com/api',
   SESSION_TTL: 30 * 60 * 1000 // 30 minutes
 };
 
