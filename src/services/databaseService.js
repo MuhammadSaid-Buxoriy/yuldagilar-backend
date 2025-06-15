@@ -57,6 +57,95 @@ export class DatabaseService {
     }
   }
 
+  // =====================================================
+  // ✅ YANGI: USER PHOTO YANGILASH FUNKSIYALARI
+  // =====================================================
+
+  /**
+   * Update user photo_url
+   */
+  static async updateUserPhoto(tg_id, photo_url) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ 
+          photo_url,
+          updated_at: new Date().toISOString()
+        })
+        .eq('tg_id', tg_id)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Database error in updateUserPhoto:', error);
+        throw error;
+      }
+
+      logger.info(`Photo updated for user ${tg_id}: ${photo_url ? 'Photo set' : 'Photo removed'}`);
+      return data;
+    } catch (error) {
+      logger.error('Error in updateUserPhoto:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get users for photo sync (last checked more than 1 hour ago)
+   */
+  static async getUsersForPhotoSync(limit = 100) {
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select('tg_id, name, photo_url, updated_at')
+        .eq('is_approved', true)
+        .or(`updated_at.lt.${oneHourAgo},updated_at.is.null`)
+        .limit(limit);
+
+      if (error) {
+        logger.error('Database error in getUsersForPhotoSync:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error('Error in getUsersForPhotoSync:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Batch update multiple users' photos
+   */
+  static async batchUpdatePhotos(updates) {
+    try {
+      const updatePromises = updates.map(async ({ tg_id, photo_url }) => {
+        return this.updateUserPhoto(tg_id, photo_url);
+      });
+
+      const results = await Promise.allSettled(updatePromises);
+      
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      
+      logger.info(`Batch photo update completed: ${successful} successful, ${failed} failed`);
+      
+      return {
+        successful,
+        failed,
+        results: results.map((result, index) => ({
+          tg_id: updates[index].tg_id,
+          success: result.status === 'fulfilled',
+          error: result.status === 'rejected' ? result.reason : null
+        }))
+      };
+    } catch (error) {
+      logger.error('Error in batchUpdatePhotos:', error);
+      throw error;
+    }
+  }
+
   /**
    * Update user approval status
    */
