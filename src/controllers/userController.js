@@ -1,9 +1,7 @@
 // =====================================================
-// USER CONTROLLER - Photo Sync Added
+// USER CONTROLLER - Frontend Compatible FIXED
 // =====================================================
 import supabase from "../config/database.js";
-import { DatabaseService } from "../services/databaseService.js";
-import telegramService from "../services/telegramService.js";
 import { AchievementService } from "../services/achievementService.js";
 import {
   sendSuccess,
@@ -194,140 +192,6 @@ async function getUserBadges(userStats) {
   return badges;
 }
 
-// =====================================================
-// ✅ YANGI: PHOTO SYNC FUNCTIONS
-// =====================================================
-
-/**
- * Sync user profile photo from Telegram
- */
-export const syncUserPhoto = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const telegramId = parseInt(userId);
-
-    if (!telegramId || telegramId <= 0) {
-      return sendError(res, "Invalid userId", 400);
-    }
-
-    console.log(`🔄 Starting photo sync for user: ${telegramId}`);
-
-    // Get current user data
-    const user = await DatabaseService.getUserByTelegramId(telegramId);
-    if (!user) {
-      return sendNotFound(res, "User not found");
-    }
-
-    // Try to get photo from Telegram
-    const telegramPhotoUrl = await telegramService.getUserProfilePhoto(telegramId);
-    
-    let newPhotoUrl;
-    let photoSource;
-
-    if (telegramPhotoUrl) {
-      newPhotoUrl = telegramPhotoUrl;
-      photoSource = 'telegram';
-      console.log(`✅ Telegram photo found for user ${telegramId}`);
-    } else {
-      // Generate fallback avatar
-      newPhotoUrl = telegramService.generateAvatarUrl(user.name, telegramId);
-      photoSource = 'generated';
-      console.log(`🎨 Generated avatar for user ${telegramId}`);
-    }
-
-    // Update database only if photo changed
-    if (user.photo_url !== newPhotoUrl) {
-      await DatabaseService.updateUserPhoto(telegramId, newPhotoUrl);
-      console.log(`💾 Photo updated in database for user ${telegramId}`);
-    } else {
-      console.log(`⚡ Photo unchanged for user ${telegramId}`);
-    }
-
-    return sendSuccess(res, {
-      photo_url: newPhotoUrl,
-      source: photoSource,
-      changed: user.photo_url !== newPhotoUrl,
-      previous_url: user.photo_url
-    });
-
-  } catch (error) {
-    console.error('❌ Photo sync error:', error);
-    return sendServerError(res, error);
-  }
-};
-
-/**
- * Background job: Sync photos for multiple users
- */
-export const batchSyncPhotos = async (req, res) => {
-  try {
-    const { adminId } = req.body;
-    
-    // Check admin permission
-    if (parseInt(adminId) !== parseInt(process.env.ADMIN_ID)) {
-      return sendError(res, "Unauthorized", 403);
-    }
-
-    console.log('🔄 Starting batch photo sync...');
-
-    // Get users that need photo sync (updated more than 1 hour ago)
-    const users = await DatabaseService.getUsersForPhotoSync(50);
-    console.log(`📋 Found ${users.length} users for photo sync`);
-
-    if (users.length === 0) {
-      return sendSuccess(res, {
-        message: "No users need photo sync",
-        processed: 0,
-        successful: 0,
-        failed: 0
-      });
-    }
-
-    // Sync photos in batches
-    const userIds = users.map(u => u.tg_id);
-    const photoResults = await telegramService.batchUpdatePhotos(userIds);
-
-    // Prepare database updates
-    const dbUpdates = photoResults.map((result, index) => {
-      const user = users[index];
-      let photoUrl;
-
-      if (result.success && result.photoUrl) {
-        photoUrl = result.photoUrl;
-      } else {
-        // Generate fallback avatar
-        photoUrl = telegramService.generateAvatarUrl(user.name, user.tg_id);
-      }
-
-      return {
-        tg_id: user.tg_id,
-        photo_url: photoUrl
-      };
-    });
-
-    // Update database
-    const dbResults = await DatabaseService.batchUpdatePhotos(dbUpdates);
-
-    console.log(`✅ Batch sync completed: ${dbResults.successful}/${users.length} successful`);
-
-    return sendSuccess(res, {
-      message: "Batch photo sync completed",
-      processed: users.length,
-      successful: dbResults.successful,
-      failed: dbResults.failed,
-      results: dbResults.results
-    });
-
-  } catch (error) {
-    console.error('❌ Batch sync error:', error);
-    return sendServerError(res, error);
-  }
-};
-
-// =====================================================
-// EXISTING FUNCTIONS (unchanged)
-// =====================================================
-
 /**
  * ✅ FIXED: Get user statistics - Frontend Compatible Format
  * Frontend expects: GET /users/:userId/statistics
@@ -407,7 +271,7 @@ export const getAchievementProgress = async (req, res) => {
 };
 
 /**
- * ✅ FIXED: Get user profile - Frontend Compatible + Auto Photo Sync
+ * ✅ FIXED: Get user profile - Frontend Compatible
  * Frontend expects: GET /users/:userId
  */
 export const getUserProfile = async (req, res) => {
@@ -438,37 +302,6 @@ export const getUserProfile = async (req, res) => {
       return sendError(res, "User not approved yet", 403);
     }
 
-    // ✅ AUTO PHOTO SYNC: Check if photo needs update (every 1 hour)
-    const shouldSyncPhoto = !userStats.updated_at || 
-      (Date.now() - new Date(userStats.updated_at).getTime()) > (60 * 60 * 1000);
-
-    let currentPhotoUrl = userStats.photo_url;
-
-    if (shouldSyncPhoto) {
-      try {
-        console.log(`🔄 Auto-syncing photo for user ${telegramId}`);
-        
-        const telegramPhotoUrl = await telegramService.getUserProfilePhoto(telegramId);
-        let newPhotoUrl;
-
-        if (telegramPhotoUrl) {
-          newPhotoUrl = telegramPhotoUrl;
-        } else {
-          newPhotoUrl = telegramService.generateAvatarUrl(userStats.name, telegramId);
-        }
-
-        // Update if photo changed
-        if (userStats.photo_url !== newPhotoUrl) {
-          await DatabaseService.updateUserPhoto(telegramId, newPhotoUrl);
-          currentPhotoUrl = newPhotoUrl;
-          console.log(`✅ Photo auto-updated for user ${telegramId}`);
-        }
-      } catch (photoError) {
-        console.warn(`⚠️ Photo sync failed for user ${telegramId}:`, photoError);
-        // Continue with existing photo
-      }
-    }
-
     // ✅ FIXED: Format profile response exactly as frontend expects
     const nameParts = (userStats.name || "").split(" ");
     const firstName = nameParts[0] || "";
@@ -488,8 +321,8 @@ export const getUserProfile = async (req, res) => {
         last_name: lastName,
         name: userStats.name, // ✅ Full name for backend compatibility
         username: userStats.username,
-        photo_url: currentPhotoUrl, // ✅ Updated photo URL
-        avatar: currentPhotoUrl, // ✅ Alternative field name
+        photo_url: userStats.photo_url,
+        avatar: userStats.photo_url, // ✅ Alternative field name
         achievements: userStats.achievements || [],
 
         // ✅ Profile specific fields (Frontend UserProfile component)
