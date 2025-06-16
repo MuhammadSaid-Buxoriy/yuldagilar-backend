@@ -1,5 +1,5 @@
 // =====================================================
-// USER CONTROLLER - Frontend Compatible FIXED
+// USER CONTROLLER - Frontend Compatible FIXED + Haftalik Logic
 // =====================================================
 import supabase from "../config/database.js";
 import { AchievementService } from "../services/achievementService.js";
@@ -11,7 +11,73 @@ import {
 } from "../utils/responses.js";
 
 /**
- * ✅ FIXED: Get weekly daily points array (exactly 7 elements)
+ * ✅ TUZATILGAN: Get current week daily points (Monday to Sunday format)
+ * Frontend expects array like [7, 3, 9, 8, 4, 10, 0] for [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+ */
+async function getCurrentWeekDailyPoints(tg_id) {
+  try {
+    const today = new Date();
+    
+    // ✅ HAFTA BOSHINI TOPISH (Dushanba)
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ...
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday should be 6 days from Monday
+    
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - daysFromMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    
+    console.log('📅 Backend current week calculation:', {
+      today: today.toDateString(),
+      weekStart: weekStart.toDateString(),
+      daysFromMonday: daysFromMonday,
+      currentDayOfWeek: dayOfWeek
+    });
+    
+    // ✅ SHU HAFTANING KUNLARI UCHUN MA'LUMOT OLISH (Du, Se, Ch, Pa, Ju, Sh, Ya)
+    const promises = [];
+    for (let i = 0; i < 7; i++) { // Monday to Sunday
+      const targetDate = new Date(weekStart);
+      targetDate.setDate(weekStart.getDate() + i);
+      const dateString = targetDate.toISOString().split('T')[0];
+      
+      promises.push(
+        supabase
+          .from('daily_progress')
+          .select('total_points')
+          .eq('tg_id', tg_id)
+          .eq('date', dateString)
+          .single()
+      );
+    }
+
+    const results = await Promise.all(promises);
+    
+    // ✅ NATIJALARNI QAYTARISH (7 ta element: Du, Se, Ch, Pa, Ju, Sh, Ya)
+    const weeklyPoints = results.map((result, index) => {
+      const targetDate = new Date(weekStart);
+      targetDate.setDate(weekStart.getDate() + index);
+      const dateString = targetDate.toDateString();
+      
+      if (result.error || !result.data) {
+        console.log(`📅 No data for ${dateString}`);
+        return 0;
+      }
+      
+      console.log(`📅 ${dateString}: ${result.data.total_points || 0} points`);
+      return result.data.total_points || 0;
+    });
+
+    console.log('📊 Backend weekly daily points:', weeklyPoints);
+    return weeklyPoints;
+
+  } catch (error) {
+    console.error('Error in getCurrentWeekDailyPoints:', error);
+    return [0, 0, 0, 0, 0, 0, 0]; // Default: all days zero
+  }
+}
+
+/**
+ * ✅ LEGACY: Get weekly daily points array (last 7 days format - for backward compatibility)
  * Returns array like [7, 3, 9, 8, 4, 10, 0] for last 7 days
  */
 async function getWeeklyDailyPoints(tg_id) {
@@ -193,7 +259,7 @@ async function getUserBadges(userStats) {
 }
 
 /**
- * ✅ FIXED: Get user statistics - Frontend Compatible Format
+ * ✅ TUZATILGAN: Get user statistics - Haftalik logic yangilangan
  * Frontend expects: GET /users/:userId/statistics
  */
 export const getUserStatistics = async (req, res) => {
@@ -224,10 +290,10 @@ export const getUserStatistics = async (req, res) => {
       return sendError(res, "User not approved yet", 403);
     }
 
-    // ✅ FIXED: Get weekly daily points (exactly 7 elements)
-    const weeklyDailyPoints = await getWeeklyDailyPoints(telegramId);
+    // ✅ YANGILANGAN: Joriy hafta uchun ma'lumot olish (Du, Se, Ch, Pa, Ju, Sh, Ya)
+    const currentWeekDailyPoints = await getCurrentWeekDailyPoints(telegramId);
 
-    // ✅ FIXED: Format response exactly as frontend expects
+    // ✅ YANGILANGAN: Format response exactly as frontend expects
     const response = {
       today: {
         completed: stats.daily_points || 0, // Frontend expects 'completed'
@@ -235,7 +301,7 @@ export const getUserStatistics = async (req, res) => {
         distance_km: parseFloat(stats.daily_distance) || 0,
       },
       weekly: {
-        dailyPoints: weeklyDailyPoints, // ✅ Always 7 elements! [7,3,9,8,4,10,0]
+        dailyPoints: currentWeekDailyPoints, // ✅ Joriy hafta Ma, Tu, We, Th, Fr, Sa, Su format!
         dailyTotal: 10, // Frontend expects this
       },
       all_time: {
@@ -243,8 +309,14 @@ export const getUserStatistics = async (req, res) => {
         total_pages: stats.total_pages || 0,
         total_distance: parseFloat(stats.total_distance) || 0,
         total_days: stats.total_days || 0,
+        perfectionist_streak: await calculateUserStreak(telegramId), // ✅ Frontend expects this
       },
     };
+
+    console.log('📤 Backend response for user', telegramId, ':', {
+      weeklyPoints: currentWeekDailyPoints,
+      todayCompleted: stats.daily_points || 0
+    });
 
     return sendSuccess(res, response);
   } catch (error) {
@@ -252,6 +324,133 @@ export const getUserStatistics = async (req, res) => {
     return sendServerError(res, error);
   }
 };
+
+/**
+ * ✅ YANGI: Get weekly stats endpoint (agar kerak bo'lsa)
+ */
+export const getWeeklyStats = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const telegramId = parseInt(userId);
+    if (!telegramId || telegramId <= 0) {
+      return sendError(res, 'Invalid userId', 400);
+    }
+
+    // Get user statistics from view
+    const { data: stats, error } = await supabase
+      .from('user_statistics')
+      .select('*')
+      .eq('tg_id', telegramId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      return sendServerError(res, error);
+    }
+
+    if (!stats) {
+      return sendError(res, 'User not found', 404);
+    }
+
+    if (!stats.is_approved) {
+      return sendError(res, 'User not approved yet', 403);
+    }
+
+    // ✅ JORIY HAFTA UCHUN MA'LUMOT OLISH
+    const currentWeekDailyPoints = await getCurrentWeekDailyPoints(telegramId);
+    
+    // ✅ JORIY HAFTA UCHUN STATISTIKA HISOBLASH
+    const today = new Date();
+    const currentDayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1; // Uzbek week: Mon=0, Sun=6
+    
+    // Faqat o'tgan va bugungi kunlar hisobga olinadi
+    const completedDaysInWeek = currentDayOfWeek + 1;
+    const currentWeekPoints = currentWeekDailyPoints
+      .slice(0, completedDaysInWeek)
+      .reduce((sum, points) => sum + points, 0);
+    
+    const maxPossiblePoints = completedDaysInWeek * 10;
+    const weeklyCompletionRate = maxPossiblePoints > 0 ? 
+      Math.round((currentWeekPoints / maxPossiblePoints) * 100) : 0;
+
+    // Format response as frontend expects
+    const response = {
+      success: true,
+      stats: {
+        // ✅ JORIY HAFTA MA'LUMOTLARI
+        weeklyPoints: currentWeekPoints,
+        dailyPoints: currentWeekDailyPoints, // [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+        
+        // Additional weekly stats
+        weeklyCompletionRate: weeklyCompletionRate,
+        completedDaysInWeek: completedDaysInWeek,
+        maxPossibleThisWeek: maxPossiblePoints,
+        
+        // Legacy fields for compatibility
+        completedTasks: currentWeekPoints,
+        totalTasks: maxPossiblePoints,
+        streak: await calculateUserStreak(telegramId),
+        bestDay: getBestDayFromWeekly(currentWeekDailyPoints.slice(0, completedDaysInWeek)),
+        improvement: calculateWeeklyImprovement(currentWeekDailyPoints),
+        
+        // ✅ DEBUG INFO
+        debug: {
+          today: today.toDateString(),
+          currentDayOfWeek: currentDayOfWeek,
+          completedDays: completedDaysInWeek,
+          weekStart: (() => {
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - currentDayOfWeek);
+            return weekStart.toDateString();
+          })()
+        }
+      }
+    };
+
+    return res.json(response);
+
+  } catch (error) {
+    console.error('Error in getWeeklyStats:', error);
+    return sendServerError(res, error);
+  }
+};
+
+/**
+ * ✅ YANGI: Calculate weekly improvement percentage
+ */
+function calculateWeeklyImprovement(currentWeekPoints) {
+  // Bu haftaning o'rtachasi vs o'tgan hafta o'rtachasi
+  // TODO: O'tgan hafta bilan solishtirish logic qo'shish mumkin
+  const currentAverage = currentWeekPoints.length > 0 ? 
+    currentWeekPoints.reduce((sum, p) => sum + p, 0) / currentWeekPoints.length : 0;
+  
+  if (currentAverage >= 8) return "+20%";
+  if (currentAverage >= 6) return "+10%";
+  if (currentAverage >= 4) return "+5%";
+  return "0%";
+}
+
+/**
+ * ✅ TUZATILGAN: Get best day from current week only
+ */
+function getBestDayFromWeekly(weeklyPoints) {
+  const days = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"];
+  
+  let maxPoints = 0;
+  let bestDayIndex = 0;
+  
+  weeklyPoints.forEach((points, index) => {
+    if (points > maxPoints) {
+      maxPoints = points;
+      bestDayIndex = index;
+    }
+  });
+  
+  return {
+    day: days[bestDayIndex] || "Dushanba",
+    points: maxPoints
+  };
+}
 
 export const getAchievementProgress = async (req, res) => {
   try {
