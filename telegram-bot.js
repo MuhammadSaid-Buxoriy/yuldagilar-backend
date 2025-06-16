@@ -472,7 +472,6 @@ bot.on('callback_query', async (query) => {
         await bot.editMessageText(
           `✅ QABUL QILINDI!\n\n` +
           `🆔 User ID: ${userId}\n` +
-          `👨‍💻 Username: ${session.username ? '@' + session.username : '❌ Yo\'q'}\n` +
           `👤 Ism: ${result.user?.name || 'N/A'}\n` +
           `📅 ${new Date().toLocaleString('uz-UZ', {
             timeZone: 'Asia/Tashkent'
