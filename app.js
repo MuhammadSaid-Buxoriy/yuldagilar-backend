@@ -1,5 +1,5 @@
 // =====================================================
-// MAIN EXPRESS APPLICATION - Polling Mode Compatible
+// MAIN EXPRESS APPLICATION - Webhook Compatible
 // =====================================================
 // File: app.js
 
@@ -13,6 +13,9 @@ import authRoutes from './src/routes/auth.js';
 import userRoutes from './src/routes/users.js';
 import taskRoutes from './src/routes/tasks.js';
 import leaderboardRoutes from './src/routes/leaderboard.js';
+
+// ✅ YANGI: Import bot functions
+import { processWebhookUpdate, CONFIG } from './telegram-bot.js';
 
 // Load environment variables
 dotenv.config();
@@ -77,6 +80,44 @@ app.use((req, res, next) => {
   next();
 });
 
+// ==================== ✅ WEBHOOK ENDPOINT (YANGI) ====================
+
+/**
+ * Telegram Webhook Endpoint
+ * POST /webhook/:botToken
+ */
+app.post('/webhook/:botToken', (req, res) => {
+  try {
+    const { botToken } = req.params;
+    const update = req.body;
+
+    // Verify bot token
+    if (botToken !== CONFIG.BOT_TOKEN) {
+      console.error('❌ Invalid bot token in webhook');
+      return res.status(403).json({ error: 'Invalid bot token' });
+    }
+
+    console.log('📥 Webhook received:', {
+      update_id: update.update_id,
+      from: update.message?.from?.id || update.callback_query?.from?.id || 'Unknown',
+      type: update.message ? 'message' : update.callback_query ? 'callback_query' : 'other'
+    });
+
+    // Process the update
+    const processed = processWebhookUpdate(update);
+    
+    if (processed) {
+      res.status(200).json({ ok: true });
+    } else {
+      res.status(500).json({ error: 'Processing failed' });
+    }
+
+  } catch (error) {
+    console.error('❌ Webhook endpoint error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==================== API DOCUMENTATION & HEALTH ====================
 
 /**
@@ -90,49 +131,49 @@ app.get('/', (req, res) => {
     status: "operational",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
-    description:
-      "Professional backend API for Yoldagilar daily challenge platform",
+    description: "Professional backend API for Yoldagilar daily challenge platform",
 
     // Frontend Compatibility Information
     frontend_compatible: true,
     real_time_polling: "15 seconds",
     response_format: "JSON with success/error flags",
 
-    // Telegram Integration Status
+    // ✅ YANGI: Telegram Integration Status
     telegram_integration: {
-      bot_mode: "polling",
-      webhook_disabled: true,
-      polling_active: true,
-      status: "✅ Bot running independently",
+      bot_mode: "webhook",
+      webhook_endpoint: `/webhook/${process.env.BOT_TOKEN ? '[BOT_TOKEN]' : 'NOT_SET'}`,
+      webhook_url: `${req.protocol}://${req.get('host')}/webhook/[BOT_TOKEN]`,
+      status: "✅ Bot running with webhook",
     },
 
     // Complete API Documentation
     endpoints: {
       // Health & Info
       health: "GET /api/health",
-      database: "GET /api/test-db",
+      database: "GET /api/test-db", 
       ping: "GET /ping",
+      webhook: "POST /webhook/:botToken", // ✅ YANGI
 
       // Authentication Flow
       auth: {
-        check: "POST /api/auth/check", // Frontend format: {userId}
-        register: "POST /api/auth/register", // Bot registration
-        approve: "POST /api/auth/approve/:tg_id", // Admin approval
-        reject: "POST /api/auth/reject/:tg_id", // Admin rejection
+        check: "POST /api/auth/check",
+        register: "POST /api/auth/register",
+        approve: "POST /api/auth/approve/:tg_id",
+        reject: "POST /api/auth/reject/:tg_id",
       },
 
       // User Management
       users: {
-        statistics: "GET /api/users/:userId/achievements/progress", // Daily/weekly/all-time
-        statistics: "GET /api/users/:userId/statistics", // Daily/weekly/all-time
-        profile: "GET /api/users/:userId", // Complete profile
+        statistics: "GET /api/users/:userId/statistics",
+        profile: "GET /api/users/:userId",
+        achievements: "GET /api/users/:userId/achievements/progress",
       },
 
       // Task Management
       tasks: {
-        submit: "POST /api/tasks/submit", // Submit daily progress
-        daily: "GET /api/tasks/daily/:userId", // Get daily tasks
-        complete: "POST /api/tasks/complete [DEPRECATED]", // Legacy endpoint
+        submit: "POST /api/tasks/submit",
+        daily: "GET /api/tasks/daily/:userId",
+        history: "GET /api/tasks/history/:userId",
       },
 
       // Leaderboard System
@@ -151,16 +192,11 @@ app.get('/', (req, res) => {
       ],
       authentication_flow: [
         "1. User opens mini app",
-        "2. POST /api/auth/check with Telegram user ID",
+        "2. POST /api/auth/check with Telegram user ID", 
         "3. If not registered: Bot registration flow",
         "4. If not approved: Wait for admin approval",
         "5. If approved: Access granted to app",
       ],
-      required_data_format: {
-        user_auth: "{ userId: number }",
-        task_submit: "{ tg_id, name, shart_1..10, pages_read, distance_km }",
-        response_format: "{ success: boolean, message?: string, ...data }",
-      },
     },
 
     // Technical Specifications
@@ -169,9 +205,9 @@ app.get('/', (req, res) => {
       authentication: "Telegram WebApp + Admin approval",
       real_time: "Frontend polling (15s intervals)",
       performance: "Sub-500ms response times",
-      scalability: "1000+ concurrent users",
+      scalability: "1000+ concurrent users", 
       compatibility: "100% frontend compatible",
-      bot_integration: "Polling mode (independent process)",
+      bot_integration: "Webhook mode (production ready)", // ✅ O'ZGARGAN
     },
   });
 });
@@ -210,12 +246,11 @@ app.get('/api/health', async (req, res) => {
     // Database Health
     database: dbHealth,
     
-    // Telegram Bot Status
+    // ✅ O'ZGARGAN: Telegram Bot Status
     telegram_bot: {
-      mode: 'polling',
-      webhook_disabled: true,
-      polling_active: true,
-      status: '✅ Running independently as separate process'
+      mode: 'webhook',
+      webhook_endpoint: `/webhook/${process.env.BOT_TOKEN ? '[CONFIGURED]' : 'NOT_SET'}`,
+      status: '✅ Running in webhook mode'
     },
     
     // Feature Status
@@ -224,7 +259,7 @@ app.get('/api/health', async (req, res) => {
       'Daily Progress Tracking': '✅ Active', 
       'Dynamic Leaderboard': '✅ Active',
       'Achievement System': '✅ Active',
-      'Telegram Bot Integration': '✅ Polling Mode',
+      'Telegram Bot Integration': '✅ Webhook Mode', // ✅ O'ZGARGAN
       'Real-time Statistics': '✅ Active',
       'Admin Approval System': '✅ Active',
       'Frontend Compatibility': '✅ 100%'
@@ -304,7 +339,7 @@ app.get('/ping', (req, res) => {
     server: 'yoldagilar-backend',
     version: '1.0.0',
     request_id: req.requestId,
-    bot_mode: 'polling'
+    bot_mode: 'webhook' // ✅ O'ZGARGAN
   });
 });
 
@@ -324,17 +359,19 @@ if (process.env.NODE_ENV !== 'production') {
         has_supabase_url: !!process.env.SUPABASE_URL,
         has_supabase_key: !!process.env.SUPABASE_KEY,
         has_bot_token: !!process.env.BOT_TOKEN,
-        has_admin_id: !!process.env.ADMIN_ID
+        has_admin_id: !!process.env.ADMIN_ID,
+        has_webhook_url: !!process.env.WEBHOOK_URL // ✅ YANGI
       },
       
       // Partial URL for verification (without security risk)
       supabase_url_preview: process.env.SUPABASE_URL?.substring(0, 50) + '...',
+      webhook_url_preview: process.env.WEBHOOK_URL?.substring(0, 50) + '...', // ✅ YANGI
       
       // Bot configuration
       bot_configuration: {
-        mode: 'polling',
-        webhook_disabled: true,
-        independent_process: true
+        mode: 'webhook', // ✅ O'ZGARGAN
+        webhook_enabled: true, // ✅ YANGI
+        polling_disabled: true // ✅ YANGI
       },
       
       frontend_compatible: true,
@@ -384,9 +421,9 @@ app.use((req, res) => {
       "GET /api/test-db",
       "POST /api/auth/check",
       "GET /api/users/:userId/statistics",
-      "GET /api/users/:userId/achievements/progress",
       "POST /api/tasks/submit",
       "GET /api/leaderboard",
+      "POST /webhook/:botToken", // ✅ YANGI
     ],
 
     documentation: "Visit / for complete API documentation",
