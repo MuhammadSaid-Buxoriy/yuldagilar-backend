@@ -1,52 +1,79 @@
 // =====================================================
-// LEADERBOARD CONTROLLER - Frontend Compatible FIXED
+// LEADERBOARD CONTROLLER - TUZATILGAN VERSIYA
 // =====================================================
 import supabase from '../config/database.js';
 import { sendSuccess, sendError, sendServerError } from '../utils/responses.js';
 
 /**
- * Get leaderboard - Frontend Compatible
+ * ✅ TUZATILGAN: Get leaderboard with proper sorting
  * GET /leaderboard?period=weekly&type=overall&limit=100&tg_id=123456789
  */
 export const getLeaderboard = async (req, res) => {
   try {
     const { 
-      period = 'weekly',
+      period = 'all',      // ✅ TUZATISH: Default 'all' instead of 'weekly'
       type = 'overall', 
-      limit = 100
+      limit = 100,
+      tg_id
     } = req.query;
 
     const limitNum = Math.min(parseInt(limit) || 100, 500);
 
-    // ✅ FIXED: Dynamic score field calculation
-    let scoreField, orderField;
+    // ✅ ASOSIY TUZATISH: To'g'ri score field va order field aniqlash
+    let scoreField, orderField, orderDirection = 'desc';
+    
     switch (period) {
       case 'daily':
-        scoreField = 'daily_points';
-        orderField = 'daily_points';
+        switch (type) {
+          case 'reading':
+            scoreField = 'daily_pages';
+            orderField = 'daily_pages';
+            break;
+          case 'distance':
+            scoreField = 'daily_distance';
+            orderField = 'daily_distance';
+            break;
+          default: // overall
+            scoreField = 'daily_points';
+            orderField = 'daily_points';
+        }
         break;
-      case 'all':
-      case 'all_time':
-        scoreField = 'total_points';
-        orderField = 'total_points';
+        
+      case 'weekly':
+        switch (type) {
+          case 'reading':
+            scoreField = 'weekly_pages';
+            orderField = 'weekly_pages';
+            break;
+          case 'distance':
+            scoreField = 'weekly_distance';
+            orderField = 'weekly_distance';
+            break;
+          default: // overall
+            scoreField = 'weekly_points';
+            orderField = 'weekly_points';
+        }
         break;
-      default: // weekly
-        scoreField = 'weekly_points';
-        orderField = 'weekly_points';
+        
+      default: // 'all' yoki 'all_time'
+        switch (type) {
+          case 'reading':
+            scoreField = 'total_pages';
+            orderField = 'total_pages';
+            break;
+          case 'distance':
+            scoreField = 'total_distance';
+            orderField = 'total_distance';
+            break;
+          default: // overall
+            scoreField = 'total_points';
+            orderField = 'total_points';
+        }
     }
 
-    // ✅ FIXED: Apply type-based filtering
-    if (type === 'reading') {
-      orderField = period === 'weekly' ? 'weekly_pages' : 
-                   period === 'daily' ? 'daily_pages' : 'total_pages';
-      scoreField = orderField;
-    } else if (type === 'distance') {
-      orderField = period === 'weekly' ? 'weekly_distance' : 
-                   period === 'daily' ? 'daily_distance' : 'total_distance';
-      scoreField = orderField;
-    }
+    console.log(`🔍 Leaderboard query: period=${period}, type=${type}, orderField=${orderField}`);
 
-    // Get leaderboard data with all required fields
+    // ✅ ASOSIY TUZATISH: To'g'ri ORDER BY bilan query
     const { data: leaderboardData, error } = await supabase
       .from('user_statistics')
       .select(`
@@ -65,48 +92,71 @@ export const getLeaderboard = async (req, res) => {
         total_pages,
         total_distance
       `)
-      .gt(orderField, 0)
-      .order(orderField, { ascending: false })
-      .order('tg_id', { ascending: true })
+      .gt(orderField, 0)                    // ✅ Faqat 0 dan katta qiymatlar
+      .order(orderField, { ascending: false })  // ✅ Eng kattadan kichikka
+      .order('tg_id', { ascending: true })       // ✅ Teng bo'lsa ID bo'yicha
       .limit(limitNum);
 
     if (error) {
-      console.error('Database error in getLeaderboard:', error);
+      console.error('❌ Database error in getLeaderboard:', error);
       return sendServerError(res, error);
     }
 
-    // ✅ FIXED: Format exactly as frontend expects
-    const leaderboard = (leaderboardData || []).map((user, index) => ({
-      rank: index + 1,
-      tg_id: user.tg_id,
-      name: user.name,
-      username: user.username,
-      photo_url: user.photo_url,
-      achievements: user.achievements || [],
-      
-      // ✅ ALL STATISTICS (Frontend needs all of them)
-      total_points: user.total_points || 0,
-      total_pages: user.total_pages || 0,
-      total_distance: parseFloat(user.total_distance) || 0,
-      weekly_points: user.weekly_points || 0,
-      weekly_pages: user.weekly_pages || 0, 
-      weekly_distance: parseFloat(user.weekly_distance) || 0,
-      daily_points: user.daily_points || 0,
-      daily_pages: user.daily_pages || 0,
-      daily_distance: parseFloat(user.daily_distance) || 0,
-      
-      // ✅ FIXED: Dynamic score field based on period+type
-      score: user[scoreField] || 0,
-      
-      // Additional frontend fields
-      points: user[scoreField] || 0,  // Alias for score
-      streak: 0,  // TODO: Calculate streak
-      change: 0   // TODO: Calculate rank change
-    }));
+    console.log(`✅ Found ${leaderboardData?.length || 0} participants for ${period} ${type}`);
 
-    // ✅ FIXED: Get current user position if exists
+    // ✅ TUZATISH: To'g'ri format bilan leaderboard yaratish
+    const leaderboard = (leaderboardData || []).map((user, index) => {
+      // Score calculation for current type/period
+      let currentScore = 0;
+      switch (period) {
+        case 'daily':
+          currentScore = type === 'reading' ? user.daily_pages : 
+                        type === 'distance' ? parseFloat(user.daily_distance) || 0 : 
+                        user.daily_points;
+          break;
+        case 'weekly':
+          currentScore = type === 'reading' ? user.weekly_pages : 
+                        type === 'distance' ? parseFloat(user.weekly_distance) || 0 : 
+                        user.weekly_points;
+          break;
+        default: // all
+          currentScore = type === 'reading' ? user.total_pages : 
+                        type === 'distance' ? parseFloat(user.total_distance) || 0 : 
+                        user.total_points;
+      }
+
+      return {
+        rank: index + 1,                    // ✅ To'g'ri rank (1, 2, 3...)
+        tg_id: user.tg_id,
+        name: user.name,
+        username: user.username,
+        photo_url: user.photo_url,
+        achievements: user.achievements || [],
+        
+        // ✅ ALL STATISTICS (Frontend needs all)
+        total_points: user.total_points || 0,
+        total_pages: user.total_pages || 0,
+        total_distance: parseFloat(user.total_distance) || 0,
+        weekly_points: user.weekly_points || 0,
+        weekly_pages: user.weekly_pages || 0, 
+        weekly_distance: parseFloat(user.weekly_distance) || 0,
+        daily_points: user.daily_points || 0,
+        daily_pages: user.daily_pages || 0,
+        daily_distance: parseFloat(user.daily_distance) || 0,
+        
+        // ✅ ASOSIY TUZATISH: To'g'ri score field
+        score: currentScore,
+        points: currentScore,  // Alias for backward compatibility
+        
+        // Additional fields
+        streak: 0,  // TODO: Calculate if needed
+        change: 0   // TODO: Calculate rank change if needed
+      };
+    });
+
+    // ✅ TUZATISH: Current user position logic
     let current_user = null;
-    const userTgId = req.query.tg_id || req.headers['x-user-id'];
+    const userTgId = tg_id || req.headers['x-user-id'];
     
     if (userTgId) {
       const telegramId = parseInt(userTgId);
@@ -127,11 +177,30 @@ export const getLeaderboard = async (req, res) => {
           .single();
           
         if (userData) {
-          // Calculate actual rank
+          // Calculate actual rank by counting users with higher scores
           const { count } = await supabase
             .from('user_statistics')
             .select('tg_id', { count: 'exact' })
             .gt(orderField, userData[scoreField] || 0);
+            
+          // Calculate score for current user
+          let userScore = 0;
+          switch (period) {
+            case 'daily':
+              userScore = type === 'reading' ? userData.daily_pages : 
+                         type === 'distance' ? parseFloat(userData.daily_distance) || 0 : 
+                         userData.daily_points;
+              break;
+            case 'weekly':
+              userScore = type === 'reading' ? userData.weekly_pages : 
+                         type === 'distance' ? parseFloat(userData.weekly_distance) || 0 : 
+                         userData.weekly_points;
+              break;
+            default: // all
+              userScore = type === 'reading' ? userData.total_pages : 
+                         type === 'distance' ? parseFloat(userData.total_distance) || 0 : 
+                         userData.total_points;
+          }
             
           current_user = {
             rank: (count || 0) + 1,
@@ -149,33 +218,46 @@ export const getLeaderboard = async (req, res) => {
             daily_points: userData.daily_points || 0,
             daily_pages: userData.daily_pages || 0,
             daily_distance: parseFloat(userData.daily_distance) || 0,
-            score: userData[scoreField] || 0,
+            score: userScore,
+            points: userScore,
             in_top_list: false
           };
         }
       }
     }
 
-    // Get total participants  
+    // Get total participants for this period/type
     const { count: totalUsers } = await supabase
       .from('user_statistics')
       .select('tg_id', { count: 'exact' })
       .gt(orderField, 0);
 
-    // ✅ FIXED: Response format exactly as frontend expects
-    return res.json({
+    // ✅ FINAL RESPONSE: To'g'ri format
+    const response = {
       success: true,
       period: period,
+      type: type,
       leaderboard: leaderboard,
       current_user: current_user,
       total_participants: totalUsers || 0,
-      // Legacy fields for backward compatibility
-      currentUserRank: current_user?.rank || null,
-      totalUsers: totalUsers || 0
-    });
+      
+      // Debug info (development only)
+      ...(process.env.NODE_ENV !== 'production' && {
+        debug: {
+          query_field: orderField,
+          score_field: scoreField,
+          result_count: leaderboard.length,
+          top_3_scores: leaderboard.slice(0, 3).map(u => u.score)
+        }
+      })
+    };
+
+    console.log(`✅ Leaderboard response: ${leaderboard.length} users, top score: ${leaderboard[0]?.score || 0}`);
+
+    return res.json(response);
 
   } catch (error) {
-    console.error('Error in getLeaderboard:', error);
+    console.error('❌ Error in getLeaderboard:', error);
     return sendServerError(res, error);
   }
 };
@@ -212,7 +294,7 @@ export const getWeeklyStats = async (req, res) => {
       return sendError(res, 'User not approved yet', 403);
     }
 
-    // Get weekly daily points
+    // Get weekly daily points (exactly 7 elements)
     const weeklyDailyPoints = await getWeeklyDailyPointsHelper(telegramId);
 
     // Format response as frontend expects
@@ -221,7 +303,7 @@ export const getWeeklyStats = async (req, res) => {
       stats: {
         weeklyPoints: stats.weekly_points || 0,
         dailyPoints: weeklyDailyPoints,
-        completedTasks: stats.weekly_points || 0,  // Approximate
+        completedTasks: stats.weekly_points || 0,  
         totalTasks: 70,  // 7 days * 10 tasks
         streak: await calculateUserStreakHelper(telegramId),
         bestDay: getBestDayFromWeekly(weeklyDailyPoints),
@@ -238,7 +320,7 @@ export const getWeeklyStats = async (req, res) => {
 };
 
 // =====================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (Same as before)
 // =====================================================
 
 /**
@@ -246,7 +328,6 @@ export const getWeeklyStats = async (req, res) => {
  */
 async function getWeeklyDailyPointsHelper(tg_id) {
   try {
-    // Get last 7 days data
     const promises = [];
     for (let i = 6; i >= 0; i--) {
       const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -262,7 +343,6 @@ async function getWeeklyDailyPointsHelper(tg_id) {
 
     const results = await Promise.all(promises);
     
-    // Always return exactly 7 elements
     return results.map(result => {
       if (result.error || !result.data) return 0;
       return result.data.total_points || 0;
@@ -270,7 +350,6 @@ async function getWeeklyDailyPointsHelper(tg_id) {
 
   } catch (error) {
     console.error('Error in getWeeklyDailyPointsHelper:', error);
-    // Always return 7 elements even on error
     return [0, 0, 0, 0, 0, 0, 0];
   }
 }
