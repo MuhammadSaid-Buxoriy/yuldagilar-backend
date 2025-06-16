@@ -1,17 +1,17 @@
 // =====================================================
-// LEADERBOARD CONTROLLER - TUZATILGAN VERSIYA
+// LEADERBOARD CONTROLLER - TO'LIQ TUZATILGAN VERSIYA  
 // =====================================================
 import supabase from '../config/database.js';
 import { sendSuccess, sendError, sendServerError } from '../utils/responses.js';
 
 /**
- * ✅ TUZATILGAN: Get leaderboard with proper sorting
+ * ✅ TO'LIQ TUZATILGAN: Get leaderboard with proper sorting and score calculation
  * GET /leaderboard?period=weekly&type=overall&limit=100&tg_id=123456789
  */
 export const getLeaderboard = async (req, res) => {
   try {
     const { 
-      period = 'all',      // ✅ TUZATISH: Default 'all' instead of 'weekly'
+      period = 'all',      
       type = 'overall', 
       limit = 100,
       tg_id
@@ -19,61 +19,59 @@ export const getLeaderboard = async (req, res) => {
 
     const limitNum = Math.min(parseInt(limit) || 100, 500);
 
-    // ✅ ASOSIY TUZATISH: To'g'ri score field va order field aniqlash
-    let scoreField, orderField, orderDirection = 'desc';
+    console.log(`🔍 Leaderboard request: period=${period}, type=${type}`);
+
+    // ✅ ASOSIY TUZATISH 1: Field mapping to'g'ri qilish
+    let orderField, scoreCalculation;
     
-    switch (period) {
-      case 'daily':
-        switch (type) {
-          case 'reading':
-            scoreField = 'daily_pages';
-            orderField = 'daily_pages';
-            break;
-          case 'distance':
-            scoreField = 'daily_distance';
-            orderField = 'daily_distance';
-            break;
-          default: // overall
-            scoreField = 'daily_points';
-            orderField = 'daily_points';
-        }
-        break;
-        
-      case 'weekly':
-        switch (type) {
-          case 'reading':
-            scoreField = 'weekly_pages';
-            orderField = 'weekly_pages';
-            break;
-          case 'distance':
-            scoreField = 'weekly_distance';
-            orderField = 'weekly_distance';
-            break;
-          default: // overall
-            scoreField = 'weekly_points';
-            orderField = 'weekly_points';
-        }
-        break;
-        
-      default: // 'all' yoki 'all_time'
-        switch (type) {
-          case 'reading':
-            scoreField = 'total_pages';
-            orderField = 'total_pages';
-            break;
-          case 'distance':
-            scoreField = 'total_distance';
-            orderField = 'total_distance';
-            break;
-          default: // overall
-            scoreField = 'total_points';
-            orderField = 'total_points';
-        }
+    // Period va Type bo'yicha to'g'ri field aniqlash
+    if (period === 'daily') {
+      switch (type) {
+        case 'reading':
+          orderField = 'daily_pages';
+          scoreCalculation = 'daily_pages';
+          break;
+        case 'distance':
+          orderField = 'daily_distance';
+          scoreCalculation = 'daily_distance';
+          break;
+        default: // overall
+          orderField = 'daily_points';
+          scoreCalculation = 'daily_points';
+      }
+    } else if (period === 'weekly') {
+      switch (type) {
+        case 'reading':
+          orderField = 'weekly_pages';
+          scoreCalculation = 'weekly_pages';
+          break;
+        case 'distance':
+          orderField = 'weekly_distance';
+          scoreCalculation = 'weekly_distance';
+          break;
+        default: // overall
+          orderField = 'weekly_points';
+          scoreCalculation = 'weekly_points';
+      }
+    } else { // 'all' or 'all_time'
+      switch (type) {
+        case 'reading':
+          orderField = 'total_pages';
+          scoreCalculation = 'total_pages';
+          break;
+        case 'distance':
+          orderField = 'total_distance';
+          scoreCalculation = 'total_distance';
+          break;
+        default: // overall
+          orderField = 'total_points';
+          scoreCalculation = 'total_points';
+      }
     }
 
-    console.log(`🔍 Leaderboard query: period=${period}, type=${type}, orderField=${orderField}`);
+    console.log(`📊 Query fields: orderField=${orderField}, scoreCalculation=${scoreCalculation}`);
 
-    // ✅ ASOSIY TUZATISH: To'g'ri ORDER BY bilan query
+    // ✅ ASOSIY TUZATISH 2: To'g'ri query with proper ordering
     const { data: leaderboardData, error } = await supabase
       .from('user_statistics')
       .select(`
@@ -90,11 +88,13 @@ export const getLeaderboard = async (req, res) => {
         weekly_distance,
         total_points,
         total_pages,
-        total_distance
+        total_distance,
+        is_approved
       `)
-      .gt(orderField, 0)                    // ✅ Faqat 0 dan katta qiymatlar
-      .order(orderField, { ascending: false })  // ✅ Eng kattadan kichikka
-      .order('tg_id', { ascending: true })       // ✅ Teng bo'lsa ID bo'yicha
+      .eq('is_approved', true)                       // ✅ Faqat tasdiqlangan userlar
+      .gt(orderField, 0)                            // ✅ Faqat 0 dan katta natijalar
+      .order(orderField, { ascending: false })      // ✅ Eng kattadan kichikka
+      .order('tg_id', { ascending: true })          // ✅ Teng bo'lganda ID bo'yicha
       .limit(limitNum);
 
     if (error) {
@@ -102,59 +102,97 @@ export const getLeaderboard = async (req, res) => {
       return sendServerError(res, error);
     }
 
-    console.log(`✅ Found ${leaderboardData?.length || 0} participants for ${period} ${type}`);
+    console.log(`✅ Query successful: Found ${leaderboardData?.length || 0} participants`);
 
-    // ✅ TUZATISH: To'g'ri format bilan leaderboard yaratish
-    const leaderboard = (leaderboardData || []).map((user, index) => {
-      // Score calculation for current type/period
+    if (!leaderboardData || leaderboardData.length === 0) {
+      return res.json({
+        success: true,
+        period: period,
+        type: type,
+        leaderboard: [],
+        current_user: null,
+        total_participants: 0,
+        message: 'No data found for selected period and type'
+      });
+    }
+
+    // ✅ ASOSIY TUZATISH 3: To'g'ri score calculation va formatting
+    const leaderboard = leaderboardData.map((user, index) => {
+      // Calculate current score based on period and type
       let currentScore = 0;
+      
       switch (period) {
         case 'daily':
-          currentScore = type === 'reading' ? user.daily_pages : 
-                        type === 'distance' ? parseFloat(user.daily_distance) || 0 : 
-                        user.daily_points;
+          if (type === 'reading') {
+            currentScore = user.daily_pages || 0;
+          } else if (type === 'distance') {
+            currentScore = parseFloat(user.daily_distance) || 0;
+          } else {
+            currentScore = user.daily_points || 0;
+          }
           break;
+          
         case 'weekly':
-          currentScore = type === 'reading' ? user.weekly_pages : 
-                        type === 'distance' ? parseFloat(user.weekly_distance) || 0 : 
-                        user.weekly_points;
+          if (type === 'reading') {
+            currentScore = user.weekly_pages || 0;
+          } else if (type === 'distance') {
+            currentScore = parseFloat(user.weekly_distance) || 0;
+          } else {
+            currentScore = user.weekly_points || 0;
+          }
           break;
-        default: // all
-          currentScore = type === 'reading' ? user.total_pages : 
-                        type === 'distance' ? parseFloat(user.total_distance) || 0 : 
-                        user.total_points;
+          
+        default: // 'all'
+          if (type === 'reading') {
+            currentScore = user.total_pages || 0;
+          } else if (type === 'distance') {
+            currentScore = parseFloat(user.total_distance) || 0;
+          } else {
+            currentScore = user.total_points || 0;
+          }
+      }
+
+      // ✅ Format distance properly (2 decimal places)
+      if (type === 'distance') {
+        currentScore = Math.round(currentScore * 100) / 100;
       }
 
       return {
-        rank: index + 1,                    // ✅ To'g'ri rank (1, 2, 3...)
+        rank: index + 1,                    
         tg_id: user.tg_id,
         name: user.name,
         username: user.username,
         photo_url: user.photo_url,
         achievements: user.achievements || [],
         
-        // ✅ ALL STATISTICS (Frontend needs all)
+        // ✅ ALL STATISTICS (for frontend compatibility)
         total_points: user.total_points || 0,
         total_pages: user.total_pages || 0,
-        total_distance: parseFloat(user.total_distance) || 0,
+        total_distance: Math.round((parseFloat(user.total_distance) || 0) * 100) / 100,
         weekly_points: user.weekly_points || 0,
         weekly_pages: user.weekly_pages || 0, 
-        weekly_distance: parseFloat(user.weekly_distance) || 0,
+        weekly_distance: Math.round((parseFloat(user.weekly_distance) || 0) * 100) / 100,
         daily_points: user.daily_points || 0,
         daily_pages: user.daily_pages || 0,
-        daily_distance: parseFloat(user.daily_distance) || 0,
+        daily_distance: Math.round((parseFloat(user.daily_distance) || 0) * 100) / 100,
         
-        // ✅ ASOSIY TUZATISH: To'g'ri score field
+        // ✅ ASOSIY TUZATISH: Current score for selected period/type
         score: currentScore,
-        points: currentScore,  // Alias for backward compatibility
+        points: currentScore,  // Alias for compatibility
         
-        // Additional fields
-        streak: 0,  // TODO: Calculate if needed
-        change: 0   // TODO: Calculate rank change if needed
+        // Additional metadata
+        current_period: period,
+        current_type: type
       };
     });
 
-    // ✅ TUZATISH: Current user position logic
+    // Log top 3 for debugging
+    console.log('🏆 Top 3 participants:');
+    leaderboard.slice(0, 3).forEach((user, index) => {
+      console.log(`  ${index + 1}. ${user.name}: ${user.score} (${scoreCalculation})`);
+    });
+
+    // ✅ TUZATISH 4: Current user position logic
     let current_user = null;
     const userTgId = tg_id || req.headers['x-user-id'];
     
@@ -168,22 +206,18 @@ export const getLeaderboard = async (req, res) => {
           ...leaderboard[userIndex],
           in_top_list: true
         };
+        console.log(`👤 Current user found in top list: rank ${current_user.rank}, score ${current_user.score}`);
       } else {
         // User not in top list - get their actual data
         const { data: userData } = await supabase
           .from('user_statistics')
           .select('*')
           .eq('tg_id', telegramId)
+          .eq('is_approved', true)
           .single();
           
         if (userData) {
-          // Calculate actual rank by counting users with higher scores
-          const { count } = await supabase
-            .from('user_statistics')
-            .select('tg_id', { count: 'exact' })
-            .gt(orderField, userData[scoreField] || 0);
-            
-          // Calculate score for current user
+          // Calculate user's current score
           let userScore = 0;
           switch (period) {
             case 'daily':
@@ -201,6 +235,18 @@ export const getLeaderboard = async (req, res) => {
                          type === 'distance' ? parseFloat(userData.total_distance) || 0 : 
                          userData.total_points;
           }
+
+          // Format distance
+          if (type === 'distance') {
+            userScore = Math.round(userScore * 100) / 100;
+          }
+          
+          // Calculate actual rank by counting users with higher scores
+          const { count } = await supabase
+            .from('user_statistics')
+            .select('tg_id', { count: 'exact' })
+            .eq('is_approved', true)
+            .gt(orderField, userScore || 0);
             
           current_user = {
             rank: (count || 0) + 1,
@@ -211,17 +257,21 @@ export const getLeaderboard = async (req, res) => {
             achievements: userData.achievements || [],
             total_points: userData.total_points || 0,
             total_pages: userData.total_pages || 0,
-            total_distance: parseFloat(userData.total_distance) || 0,
+            total_distance: Math.round((parseFloat(userData.total_distance) || 0) * 100) / 100,
             weekly_points: userData.weekly_points || 0,
             weekly_pages: userData.weekly_pages || 0,
-            weekly_distance: parseFloat(userData.weekly_distance) || 0,
+            weekly_distance: Math.round((parseFloat(userData.weekly_distance) || 0) * 100) / 100,
             daily_points: userData.daily_points || 0,
             daily_pages: userData.daily_pages || 0,
-            daily_distance: parseFloat(userData.daily_distance) || 0,
+            daily_distance: Math.round((parseFloat(userData.daily_distance) || 0) * 100) / 100,
             score: userScore,
             points: userScore,
-            in_top_list: false
+            in_top_list: false,
+            current_period: period,
+            current_type: type
           };
+
+          console.log(`👤 Current user found outside top list: rank ${current_user.rank}, score ${current_user.score}`);
         }
       }
     }
@@ -230,9 +280,10 @@ export const getLeaderboard = async (req, res) => {
     const { count: totalUsers } = await supabase
       .from('user_statistics')
       .select('tg_id', { count: 'exact' })
+      .eq('is_approved', true)
       .gt(orderField, 0);
 
-    // ✅ FINAL RESPONSE: To'g'ri format
+    // ✅ FINAL RESPONSE
     const response = {
       success: true,
       period: period,
@@ -241,18 +292,19 @@ export const getLeaderboard = async (req, res) => {
       current_user: current_user,
       total_participants: totalUsers || 0,
       
-      // Debug info (development only)
-      ...(process.env.NODE_ENV !== 'production' && {
-        debug: {
-          query_field: orderField,
-          score_field: scoreField,
-          result_count: leaderboard.length,
-          top_3_scores: leaderboard.slice(0, 3).map(u => u.score)
-        }
-      })
+      // ✅ Query info for debugging
+      query_info: {
+        order_field: orderField,
+        score_calculation: scoreCalculation,
+        result_count: leaderboard.length,
+        ...(leaderboard.length > 0 && {
+          top_score: leaderboard[0].score,
+          score_range: `${leaderboard[leaderboard.length - 1]?.score || 0} - ${leaderboard[0].score}`
+        })
+      }
     };
 
-    console.log(`✅ Leaderboard response: ${leaderboard.length} users, top score: ${leaderboard[0]?.score || 0}`);
+    console.log(`✅ Leaderboard response prepared: ${leaderboard.length} users, period=${period}, type=${type}`);
 
     return res.json(response);
 
@@ -264,7 +316,7 @@ export const getLeaderboard = async (req, res) => {
 
 /**
  * Get weekly stats for user (compatibility endpoint)
- * GET /stats/weekly/:userId
+ * GET /stats/weekly/:userId  
  */
 export const getWeeklyStats = async (req, res) => {
   try {
@@ -320,7 +372,7 @@ export const getWeeklyStats = async (req, res) => {
 };
 
 // =====================================================
-// HELPER FUNCTIONS (Same as before)
+// HELPER FUNCTIONS
 // =====================================================
 
 /**
