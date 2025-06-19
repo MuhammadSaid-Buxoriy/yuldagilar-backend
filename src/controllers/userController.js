@@ -484,7 +484,7 @@ export const getAchievementProgress = async (req, res) => {
 };
 
 /**
- * ✅ FIXED: Get user profile - Frontend Compatible
+ * ✅ TUZATILGAN: Get user profile - Real-time achievements bilan
  * Frontend expects: GET /users/:userId
  */
 export const getUserProfile = async (req, res) => {
@@ -515,6 +515,17 @@ export const getUserProfile = async (req, res) => {
       return sendError(res, "User not approved yet", 403);
     }
 
+    // ✅ YANGI: Real-time achievement progress olish
+    console.log(`👤 Getting real-time achievements for user: ${telegramId}`);
+    const achievementProgress = await AchievementService.getAchievementProgress(telegramId);
+    
+    // ✅ YANGI: Earned achievements ro'yxatini yaratish
+    const earnedAchievements = achievementProgress
+      .filter(achievement => achievement.earned)
+      .map(achievement => achievement.id);
+    
+    console.log(`🏆 Earned achievements for user ${telegramId}:`, earnedAchievements);
+
     // ✅ FIXED: Format profile response exactly as frontend expects
     const nameParts = (userStats.name || "").split(" ");
     const firstName = nameParts[0] || "";
@@ -523,7 +534,13 @@ export const getUserProfile = async (req, res) => {
     const currentStreak = await calculateUserStreak(telegramId);
     const longestStreak = await calculateLongestStreak(telegramId);
     const userRank = await getUserRank(telegramId);
-    const badges = await getUserBadges(userStats);
+    
+    // ✅ TUZATILDI: Real-time achievements bilan badges yaratish
+    const userStatsWithRealAchievements = {
+      ...userStats,
+      achievements: earnedAchievements // ✅ Real-time achievements
+    };
+    const badges = await getUserBadges(userStatsWithRealAchievements);
 
     const profile = {
       success: true,
@@ -536,7 +553,7 @@ export const getUserProfile = async (req, res) => {
         username: userStats.username,
         photo_url: userStats.photo_url,
         avatar: userStats.photo_url, // ✅ Alternative field name
-        achievements: userStats.achievements || [],
+        achievements: earnedAchievements, // ✅ Real-time achievements
 
         // ✅ Profile specific fields (Frontend UserProfile component)
         level: Math.floor((userStats.total_points || 0) / 1000) + 1,
@@ -561,8 +578,13 @@ export const getUserProfile = async (req, res) => {
           totalCharity: Math.floor((userStats.total_points || 0) / 10),
           totalDistance: parseFloat(userStats.total_distance) || 0,
         },
+
+        // ✅ YANGI: Real-time achievement progress
+        achievementProgress: achievementProgress,
       },
     };
+
+    console.log(`✅ Profile response for user ${telegramId} ready with ${earnedAchievements.length} achievements`);
 
     return res.json(profile);
   } catch (error) {
