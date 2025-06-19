@@ -17,7 +17,9 @@ export class StatisticsService {
       const weeklyDailyPoints = await this.getWeeklyDailyPoints(tg_id);
       const streak = await this.calculateUserStreak(tg_id);
       const longestStreak = await this.calculateLongestStreak(tg_id);
+      const progressHistory = await DatabaseService.getUserProgressHistory(tg_id, 60);
 
+      
       // 💡 Yangi statistika: perfectionist va early bird
       const perfectionistStreak =
         await AchievementService.getPerfectionistStreak(progressHistory);
