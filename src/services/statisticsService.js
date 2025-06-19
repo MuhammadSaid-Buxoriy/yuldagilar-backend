@@ -1,6 +1,7 @@
 import { DatabaseService } from "./databaseService.js";
 import logger from "../utils/logger.js";
 import { AchievementService } from "./achievementService.js";
+import supabase from "../config/database.js";
 
 export class StatisticsService {
   /**
