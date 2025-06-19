@@ -452,6 +452,9 @@ function getBestDayFromWeekly(weeklyPoints) {
   };
 }
 
+/**
+ * ✅ TUZATILGAN: Get achievement progress with debug logs
+ */
 export const getAchievementProgress = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -461,7 +464,18 @@ export const getAchievementProgress = async (req, res) => {
       return sendError(res, "Invalid user ID", 400);
     }
 
+    console.log(`🏆 Getting achievement progress for user: ${tg_id}`);
+
+    // ✅ MUHIM: AchievementService.getAchievementProgress chaqirish
     const progress = await AchievementService.getAchievementProgress(tg_id);
+    
+    console.log(`🏆 Achievement progress result:`, progress);
+    
+    // ✅ DEBUG: Har bir achievement'ni log qilish
+    progress.forEach((achievement, index) => {
+      console.log(`🏆 Achievement ${index}: ${achievement.name} - ${achievement.current}/${achievement.max} (${achievement.percentage.toFixed(1)}%)`);
+    });
+
     return sendSuccess(res, progress);
   } catch (error) {
     console.error("❌ Error in getAchievementProgress:", error);
