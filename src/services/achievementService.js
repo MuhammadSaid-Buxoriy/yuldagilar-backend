@@ -27,14 +27,6 @@ export class AchievementService {
       color: "#10b981",
       checkFunction: "checkAthleteAchievement",
     },
-    perfectionist: {
-      id: "perfectionist",
-      name: "Olov",
-      description: "21 kun ketma-ket 10/10 vazifa bajarish",
-      icon: "⭐",
-      color: "#f59e0b",
-      checkFunction: "checkPerfectionistAchievement",
-    },
     early_bird: {
       id: "early_bird",
       name: "Uyg'oq",
@@ -42,6 +34,14 @@ export class AchievementService {
       icon: "🌅",
       color: "#8b5cf6",
       checkFunction: "checkEarlyBirdAchievement",
+    },
+    perfectionist: {
+      id: "perfectionist",
+      name: "Olov",
+      description: "21 kun ketma-ket 10/10 vazifa bajarish",
+      icon: "⭐",
+      color: "#f59e0b",
+      checkFunction: "checkPerfectionistAchievement",
     },
   };
 
@@ -133,121 +133,143 @@ export class AchievementService {
   }
 
   /**
-   * Check perfectionist achievement (10/10 tasks for 21 consecutive days)
+   * ✅ TUZATILGAN: Check perfectionist achievement (10/10 tasks for 21 consecutive days)
    */
   static async checkPerfectionistAchievement(progressHistory) {
-    let streak = 0;
-
+    let consecutiveStreak = 0;
     const today = new Date();
-    for (let i = 0; i < progressHistory.length; i++) {
-      const expectedDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+
+    // Bugundan boshlab orqaga qarab tekshirish
+    for (let i = 0; i < 60; i++) { // 60 kungacha tekshirish
+      const targetDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
-      const day = progressHistory.find((p) => p.date === expectedDate);
+      const dayData = progressHistory.find((p) => p.date === targetDate);
 
-      if (day) {
-        const tasksCompleted = Array.from(
+      if (dayData) {
+        // Barcha 10 ta vazifa bajarilganmi tekshirish
+        const allTasksCompleted = Array.from(
           { length: 10 },
-          (_, idx) => day[`shart_${idx + 1}`]
-        );
-        const allCompleted = tasksCompleted.every(
-          (val) => val === 1 || val === true
-        );
+          (_, idx) => dayData[`shart_${idx + 1}`]
+        ).every((val) => val === 1 || val === true);
 
-        if (allCompleted) {
-          streak++;
-          if (streak >= 21) return true;
+        if (allTasksCompleted) {
+          consecutiveStreak++;
+          // Agar 21 kun to'lsa - muvaffaqiyat!
+          if (consecutiveStreak >= 21) {
+            return true;
+          }
         } else {
-          streak = 0;
+          // ❌ Zanjir uzildi - 0 dan qayta boshlash
+          break;
         }
       } else {
-        streak = 0;
+        // ❌ Ma'lumot yo'q - zanjir uzildi
+        break;
       }
     }
 
-    return false;
+    return false; // 21 kun to'lmagan
   }
 
   /**
-   * Check early bird achievement (task 9 completed 21 consecutive days)
+   * ✅ TUZATILGAN: Check early bird achievement (task 9 completed 21 consecutive days)
    */
   static async checkEarlyBirdAchievement(progressHistory) {
-    let streak = 0;
+    let consecutiveStreak = 0;
     const today = new Date();
 
-    for (let i = 0; i < progressHistory.length; i++) {
-      const expectedDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+    // Bugundan boshlab orqaga qarab tekshirish
+    for (let i = 0; i < 60; i++) { // 60 kungacha tekshirish
+      const targetDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
-      const day = progressHistory.find((p) => p.date === expectedDate);
+      const dayData = progressHistory.find((p) => p.date === targetDate);
 
-      if (day && day.shart_9 === 1) {
-        streak++;
-        if (streak >= 21) return true;
+      if (dayData && (dayData.shart_9 === 1 || dayData.shart_9 === true)) {
+        consecutiveStreak++;
+        // Agar 21 kun to'lsa - muvaffaqiyat!
+        if (consecutiveStreak >= 21) {
+          return true;
+        }
       } else {
-        streak = 0; // uzildi - qaytadan boshlaymiz
+        // ❌ Zanjir uzildi - 0 dan qayta boshlash  
+        break;
       }
     }
 
-    return false;
+    return false; // 21 kun to'lmagan
   }
 
   /**
-   * Get current early bird streak (consecutive days task 9 completed)
+   * ✅ TUZATILGAN: Get current early bird streak (consecutive days task 9 completed)
    */
   static async getEarlyBirdProgress(progressHistory) {
-    let streak = 0;
+    let consecutiveStreak = 0;
+    const today = new Date();
 
+    // Bugundan boshlab orqaga qarab tekshirish
     for (let i = 0; i < 60; i++) {
-      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+      const targetDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
-      const day = progressHistory.find((p) => p.date === targetDate);
+      const dayData = progressHistory.find((p) => p.date === targetDate);
 
-      if (day && day.shart_9 === 1) {
-        streak++;
+      if (dayData && (dayData.shart_9 === 1 || dayData.shart_9 === true)) {
+        consecutiveStreak++;
       } else {
-        break; // uzildi
-      }
-
-      if (streak >= 21) break;
-    }
-
-    return streak;
-  }
-
-  static async getPerfectionistStreak(progressHistory) {
-    let streak = 0;
-
-    for (let i = 0; i < 60; i++) {
-      const targetDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-
-      const day = progressHistory.find((p) => p.date === targetDate);
-      if (!day) {
-        streak = 0;
-        continue;
-      }
-
-      const allTasksCompleted = Array.from(
-        { length: 10 },
-        (_, idx) => day[`shart_${idx + 1}`]
-      ).every((val) => val === true || val === 1);
-
-      if (allTasksCompleted) {
-        streak++;
-      } else {
+        // ❌ Zanjir uzildi - to'xtash
         break;
       }
 
-      if (streak >= 21) break;
+      // Maksimal 21 kun
+      if (consecutiveStreak >= 21) break;
     }
 
-    return streak;
+    return consecutiveStreak;
+  }
+
+  /**
+   * ✅ TUZATILGAN: Get perfectionist streak (consecutive days all tasks completed)
+   */
+  static async getPerfectionistStreak(progressHistory) {
+    let consecutiveStreak = 0;
+    const today = new Date();
+
+    // Bugundan boshlab orqaga qarab tekshirish
+    for (let i = 0; i < 60; i++) {
+      const targetDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const dayData = progressHistory.find((p) => p.date === targetDate);
+
+      if (dayData) {
+        // Barcha 10 ta vazifa bajarilganmi tekshirish
+        const allTasksCompleted = Array.from(
+          { length: 10 },
+          (_, idx) => dayData[`shart_${idx + 1}`]
+        ).every((val) => val === 1 || val === true);
+
+        if (allTasksCompleted) {
+          consecutiveStreak++;
+        } else {
+          // ❌ Zanjir uzildi - to'xtash
+          break;
+        }
+      } else {
+        // ❌ Ma'lumot yo'q - zanjir uzildi
+        break;
+      }
+
+      // Maksimal 21 kun
+      if (consecutiveStreak >= 21) break;
+    }
+
+    return consecutiveStreak;
   }
 
   /**
