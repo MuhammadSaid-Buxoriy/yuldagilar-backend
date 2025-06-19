@@ -192,13 +192,13 @@ export class DatabaseService {
   }
 
   /**
-   * Get user progress history
+   * ✅ TUZATILDI: Get user progress history (barcha vazifalar bilan)
    */
   static async getUserProgressHistory(tg_id, days = 60) {
     try {
       const { data, error } = await supabase
         .from('daily_progress')
-        .select('date, total_points, pages_read, distance_km')
+        .select('date, total_points, pages_read, distance_km, shart_1, shart_2, shart_3, shart_4, shart_5, shart_6, shart_7, shart_8, shart_9, shart_10')
         .eq('tg_id', tg_id)
         .gte('date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
         .order('date', { ascending: false });
