@@ -6,7 +6,7 @@ export class AchievementService {
     consistent: {
       id: "consistent",
       name: "Faol",
-      description: "21 kun ketma-ket faol bo'lish",
+      description: "21 kun faol bo'lish",
       icon: "🔥",
       color: "#ef4444",
       checkFunction: "checkConsistentAchievement",
@@ -14,7 +14,7 @@ export class AchievementService {
     reader: {
       id: "reader",
       name: "Kitobxon",
-      description: "10,000 bet kitob o'qish",
+      description: "6,000 bet kitob o'qish",
       icon: "📚",
       color: "#3b82f6",
       checkFunction: "checkReaderAchievement",
@@ -118,7 +118,7 @@ export class AchievementService {
       (sum, day) => sum + (day.pages_read || 0),
       0
     );
-    return totalPages >= 10000;
+    return totalPages >= 6000;
   }
 
   /**
@@ -306,7 +306,7 @@ export class AchievementService {
               (sum, day) => sum + (day.pages_read || 0),
               0
             );
-            maxProgress = 10000;
+            maxProgress = 6000;
             break;
           case "athlete":
             currentProgress = progressHistory.reduce(

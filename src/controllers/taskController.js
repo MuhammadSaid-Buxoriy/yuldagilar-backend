@@ -44,7 +44,7 @@ async function updateUserAchievements(tg_id) {
 
     // ✅ Check for "reader" achievement (100+ pages total)
     const totalPages = progressHistory.reduce((sum, day) => sum + (day.pages_read || 0), 0);
-    if (totalPages >= 10000) {
+    if (totalPages >= 6000) {
       achievements.push('reader');
     }
 
