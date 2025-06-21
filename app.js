@@ -16,6 +16,8 @@ import leaderboardRoutes from './src/routes/leaderboard.js';
 
 // ✅ YANGI: Import bot functions
 import { processWebhookUpdate, CONFIG } from './telegram-bot.js';
+import { corsMiddleware, handlePreflightOptions, corsErrorHandler, debugCors } from './src/middleware/cors.js';
+
 
 // Load environment variables
 dotenv.config();
@@ -29,24 +31,30 @@ const app = express();
  * CORS Configuration - Frontend Compatible
  * Allows requests from development and production frontends
  */
-app.use(cors({
-  origin: [
-    'http://localhost:5173',           // Local development (Vite)
-    'http://localhost:3000',           // Local development (React)
-    'https://yuldagilar.vercel.app',   // Production frontend
-    'https://yoldagilar.vercel.app',   // Alternative spelling
-    'https://t.me'                     // Telegram WebApp
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ]
-}));
+// app.use(cors({
+//   origin: [
+//     'http://localhost:5173',           // Local development (Vite)
+//     'http://localhost:3000',           // Local development (React)
+//     'https://yuldagilar.vercel.app',   // Production frontend
+//     'https://yoldagilar.vercel.app',   // Alternative spelling
+//     'https://t.me'                     // Telegram WebApp
+//   ],
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: [
+//     'Content-Type', 
+//     'Authorization',
+//     'X-Requested-With',
+//     'Accept',
+//     'Origin'
+//   ]
+// }));
+
+// ✅ YANGI CORS Middleware'lar
+app.use(handlePreflightOptions); // OPTIONS so‘rovlar uchun (Telegram WebApp uchun zarur)
+app.use(corsMiddleware);         // Asosiy CORS siyosati
+app.use(debugCors);              // Debug rejim faqat developmentda foydali
+
 
 /**
  * Body Parsing Middleware
@@ -430,6 +438,8 @@ app.use((req, res) => {
     support: "Check endpoint spelling and method type",
   });
 });
+
+app.use(corsErrorHandler);
 
 /**
  * Global Error Handler
