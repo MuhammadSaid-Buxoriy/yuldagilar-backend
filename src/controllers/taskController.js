@@ -1,73 +1,158 @@
 // =====================================================
-// TASK CONTROLLER - BARCHA SINTAKS XATOLARI TUZATILDI
+// TASK CONTROLLER - TIMEZONE VA SANA MUAMMOSI TUZATILDI
 // =====================================================
 import supabase from '../config/database.js';
 import { sendSuccess, sendError, sendNotFound, sendServerError } from '../utils/responses.js';
 
 /**
- * ✅ FIXED: Update user achievements based on progress
+ * ✅ YANGI: Foydalanuvchi timezone bo'yicha bugungi sanani olish
+ */
+function getUserTodayDate(timezone = 'Asia/Tashkent') {
+  try {
+    // Foydalanuvchi timezone bo'yicha bugungi sana
+    const now = new Date();
+    const userDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+    return userDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+  } catch (error) {
+    console.error('Timezone error, using UTC:', error);
+    return new Date().toISOString().split('T')[0];
+  }
+}
+
+/**
+ * ✅ YANGI: Foydalanuvchi timezone'ini aniqlash (Frontend'dan kelishi kerak)
+ */
+function detectUserTimezone(req) {
+  // Frontend'dan timezone yuborilishi kerak: headers yoki body orqali
+  const timezone = req.headers['x-timezone'] || 
+                   req.body.timezone || 
+                   'Asia/Tashkent'; // O'zbekiston default
+  return timezone;
+}
+
+/**
+ * ✅ TUZATILGAN: Update user achievements based on progress
  */
 async function updateUserAchievements(tg_id) {
   try {
+    console.log(`🏆 Checking achievements for user ${tg_id}...`);
+    
     // Get user's progress history for achievement calculation
     const { data: progressHistory } = await supabase
       .from('daily_progress')
-      .select('date, total_points, pages_read, distance_km')
+      .select('date, total_points, pages_read, distance_km, shart_1, shart_2, shart_3, shart_4, shart_5, shart_6, shart_7, shart_8, shart_9, shart_10')
       .eq('tg_id', tg_id)
       .order('date', { ascending: false })
-      .limit(30);
+      .limit(60); // Last 60 days
 
     if (!progressHistory || progressHistory.length === 0) {
+      console.log(`ℹ️ No progress history found for user ${tg_id}`);
       return;
     }
 
-    const achievements = [];
+    const currentAchievements = [];
 
-    // ✅ Check for "consistent" achievement (7 days in a row)
+    // ✅ 1. FAOL (Consistent) - 21 kun ketma-ket faollik
     let consecutiveDays = 0;
-    const today = new Date();
+    const today = new Date().toISOString().split('T')[0];
     
-    for (let i = 0; i < Math.min(progressHistory.length, 30); i++) {
-      const expectedDate = new Date(today.getTime() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const dayData = progressHistory.find(p => p.date === expectedDate);
+    for (let i = 0; i < 21; i++) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - i);
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
+      const dayData = progressHistory.find(p => p.date === dateStr);
       
       if (dayData && dayData.total_points > 0) {
         consecutiveDays++;
-        if (consecutiveDays >= 21) {
-          achievements.push('consistent');
-          break;
-        }
       } else {
-        break;
+        break; // Zanjir uzildi
       }
     }
+    
+    if (consecutiveDays >= 21) {
+      currentAchievements.push('consistent');
+      console.log(`✅ Achievement earned: consistent (${consecutiveDays} days)`);
+    } else {
+      console.log(`📊 Consistent progress: ${consecutiveDays}/21 days`);
+    }
 
-    // ✅ Check for "reader" achievement (100+ pages total)
+    // ✅ 2. KITOBXON (Reader) - 6000 bet o'qish
     const totalPages = progressHistory.reduce((sum, day) => sum + (day.pages_read || 0), 0);
     if (totalPages >= 6000) {
-      achievements.push('reader');
+      currentAchievements.push('reader');
+      console.log(`✅ Achievement earned: reader (${totalPages} pages)`);
+    } else {
+      console.log(`📊 Reader progress: ${totalPages}/6000 pages`);
     }
 
-    // ✅ Check for "athlete" achievement (50+ km total)
+    // ✅ 3. SPORTCHI (Athlete) - 100 km yugurish
     const totalDistance = progressHistory.reduce((sum, day) => sum + (parseFloat(day.distance_km) || 0), 0);
     if (totalDistance >= 100) {
-      achievements.push('athlete');
+      currentAchievements.push('athlete');
+      console.log(`✅ Achievement earned: athlete (${totalDistance} km)`);
+    } else {
+      console.log(`📊 Athlete progress: ${totalDistance}/100 km`);
     }
 
-    // ✅ Check for "perfectionist" achievement (10/10 tasks for 3 days)
-    const perfectDays = progressHistory.filter(day => day.total_points === 10).length;
-    if (perfectDays >= 21) {
-      achievements.push('perfectionist');
+    // ✅ 4. UYG'OQ (Early Bird) - 21 kun ketma-ket erta turish (shart_9)
+    let earlyBirdStreak = 0;
+    for (let i = 0; i < 21; i++) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - i);
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
+      const dayData = progressHistory.find(p => p.date === dateStr);
+      
+      if (dayData && dayData.shart_9 === 1) {
+        earlyBirdStreak++;
+      } else {
+        break; // Zanjir uzildi
+      }
+    }
+    
+    if (earlyBirdStreak >= 21) {
+      currentAchievements.push('early_bird');
+      console.log(`✅ Achievement earned: early_bird (${earlyBirdStreak} days)`);
+    } else {
+      console.log(`📊 Early bird progress: ${earlyBirdStreak}/21 days`);
     }
 
-    // ✅ Check for "early_bird" achievement (high activity for 14 days)
-    const highActivityDays = progressHistory.filter(day => day.total_points >= 8).length;
-    if (highActivityDays >= 21) {
-      achievements.push('early_bird');
+    // ✅ 5. OLOV (Perfectionist) - 21 kun ketma-ket 10/10 vazifa
+    let perfectionistStreak = 0;
+    for (let i = 0; i < 21; i++) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - i);
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
+      const dayData = progressHistory.find(p => p.date === dateStr);
+      
+      if (dayData) {
+        // Barcha 10 ta vazifa bajarilganmi tekshirish
+        const allTasksCompleted = [
+          dayData.shart_1, dayData.shart_2, dayData.shart_3, dayData.shart_4, dayData.shart_5,
+          dayData.shart_6, dayData.shart_7, dayData.shart_8, dayData.shart_9, dayData.shart_10
+        ].every(task => task === 1);
+        
+        if (allTasksCompleted) {
+          perfectionistStreak++;
+        } else {
+          break; // Zanjir uzildi
+        }
+      } else {
+        break; // Ma'lumot yo'q
+      }
+    }
+    
+    if (perfectionistStreak >= 21) {
+      currentAchievements.push('perfectionist');
+      console.log(`✅ Achievement earned: perfectionist (${perfectionistStreak} days)`);
+    } else {
+      console.log(`📊 Perfectionist progress: ${perfectionistStreak}/21 days`);
     }
 
-    // ✅ Update user achievements if any new ones earned
-    if (achievements.length > 0) {
+    // ✅ Update user achievements if any earned
+    if (currentAchievements.length > 0) {
       // Get current achievements to merge
       const { data: currentUser } = await supabase
         .from('users')
@@ -75,11 +160,11 @@ async function updateUserAchievements(tg_id) {
         .eq('tg_id', tg_id)
         .single();
 
-      const currentAchievements = currentUser?.achievements || [];
-      const allAchievements = Array.from(new Set([...currentAchievements, ...achievements]));
+      const existingAchievements = currentUser?.achievements || [];
+      const allAchievements = Array.from(new Set([...existingAchievements, ...currentAchievements]));
 
       // Only update if there are new achievements
-      if (allAchievements.length > currentAchievements.length) {
+      if (allAchievements.length > existingAchievements.length) {
         await supabase
           .from('users')
           .update({ 
@@ -88,18 +173,18 @@ async function updateUserAchievements(tg_id) {
           })
           .eq('tg_id', tg_id);
 
-        console.log(`✅ New achievements for user ${tg_id}:`, achievements);
+        const newAchievements = currentAchievements.filter(ach => !existingAchievements.includes(ach));
+        console.log(`🏆 NEW achievements for user ${tg_id}:`, newAchievements);
       }
     }
 
   } catch (error) {
-    console.error('Error updating achievements:', error);
+    console.error('❌ Error updating achievements:', error);
   }
 }
 
 /**
- * ✅ FIXED: Get daily tasks for user
- * Frontend expects: GET /tasks/daily/:userId
+ * ✅ TUZATILGAN: Get daily tasks for user with correct timezone
  */
 export const getDailyTasks = async (req, res) => {
   try {
@@ -129,20 +214,25 @@ export const getDailyTasks = async (req, res) => {
       return sendError(res, 'User not approved yet', 403);
     }
 
+    // ✅ MUHIM: Foydalanuvchi timezone bo'yicha bugungi sana
+    const userTimezone = detectUserTimezone(req);
+    const todayDate = getUserTodayDate(userTimezone);
+    
+    console.log(`📅 Getting tasks for user ${telegramId} on ${todayDate} (${userTimezone})`);
+
     // Get today's progress
-    const today = new Date().toISOString().split('T')[0];
     const { data: progress, error: progressError } = await supabase
       .from('daily_progress')
       .select('*')
       .eq('tg_id', telegramId)
-      .eq('date', today)
+      .eq('date', todayDate)
       .single();
 
     if (progressError && progressError.code !== 'PGRST116') {
       console.error('Error getting daily progress:', progressError);
     }
 
-    // ✅ FIXED: Task configuration matching frontend exactly
+    // ✅ Task configuration matching frontend exactly
     const TASKS_CONFIG = [
       { id: 1, title: "Kunlik vird", description: "Zikr, Qur'on tilovati, ibodat", points: 50, category: "prayer", icon: "🕌", difficulty: "easy" },
       { id: 2, title: "Silai rahm", description: "Ota-ona va qarindoshlar bilan aloqa", points: 50, category: "family", icon: "❤️", difficulty: "easy" },
@@ -156,7 +246,7 @@ export const getDailyTasks = async (req, res) => {
       { id: 10, title: "Sport/Mashqlar", description: "Yugurish yoki mashqlar", points: 50, category: "sport", icon: "🏃‍♂️", difficulty: "medium" }
     ];
 
-    // ✅ ASOSIY TUZATISH: Har bir vazifa uchun completion holatini ko'rsatish
+    // ✅ Har bir vazifa uchun completion holatini ko'rsatish
     const tasks = TASKS_CONFIG.map(task => ({
       ...task,
       completed: progress ? Boolean(progress[`shart_${task.id}`]) : false,
@@ -165,20 +255,21 @@ export const getDailyTasks = async (req, res) => {
 
     const completedCount = progress ? progress.total_points : 0;
 
-    // ✅ TUZATILDI: Frontend kutayotgan format (today property qo'shildi)
+    // ✅ Frontend kutayotgan format
     const response = {
       success: true,
-      date: today,
+      date: todayDate, // ✅ To'g'ri sana qaytariladi
+      user_timezone: userTimezone, // ✅ Debug uchun
       tasks: tasks,
       completedCount: completedCount,
       totalTasks: 10,
-      totalPoints: 500,  // 10 tasks * 50 points each
+      totalPoints: 500,
       earnedPoints: completedCount * 50,
       completionPercentage: Math.round((completedCount / 10) * 100),
       // Additional stats
       pages_read: progress?.pages_read || 0,
       distance_km: parseFloat(progress?.distance_km) || 0,
-      // ✅ FRONTEND UCHUN: today property qo'shildi
+      // ✅ FRONTEND UCHUN: today property
       today: {
         completed: completedCount,
         pages_read: progress?.pages_read || 0,
@@ -189,8 +280,8 @@ export const getDailyTasks = async (req, res) => {
     console.log(`✅ Daily tasks sent for user ${telegramId}:`, {
       completed: completedCount,
       total: 10,
-      date: today,
-      tasksWithCompletion: tasks.filter(t => t.completed).length
+      date: todayDate,
+      timezone: userTimezone
     });
 
     return res.json(response);
@@ -202,9 +293,7 @@ export const getDailyTasks = async (req, res) => {
 };
 
 /**
- * ✅ FIXED: Submit daily progress
- * Frontend expects: POST /tasks/submit
- * Body: { tg_id, name?, shart_1..10, pages_read, distance_km }
+ * ✅ TUZATILGAN: Submit daily progress with correct timezone
  */
 export const submitDailyProgress = async (req, res) => {
   try {
@@ -214,7 +303,8 @@ export const submitDailyProgress = async (req, res) => {
       shart_1, shart_2, shart_3, shart_4, shart_5,
       shart_6, shart_7, shart_8, shart_9, shart_10,
       pages_read,
-      distance_km
+      distance_km,
+      timezone // ✅ Frontend'dan timezone qabul qilish
     } = req.body;
 
     // ✅ Validate required fields
@@ -226,6 +316,12 @@ export const submitDailyProgress = async (req, res) => {
     if (!telegramId || telegramId <= 0) {
       return sendError(res, 'Invalid tg_id format', 400);
     }
+
+    // ✅ MUHIM: Foydalanuvchi timezone bo'yicha bugungi sana
+    const userTimezone = timezone || detectUserTimezone(req);
+    const todayDate = getUserTodayDate(userTimezone);
+    
+    console.log(`💾 Submitting progress for user ${telegramId} on ${todayDate} (${userTimezone})`);
 
     // ✅ Validate task values (must be 0 or 1)
     const tasks = [shart_1, shart_2, shart_3, shart_4, shart_5, shart_6, shart_7, shart_8, shart_9, shart_10];
@@ -267,10 +363,10 @@ export const submitDailyProgress = async (req, res) => {
       return sendError(res, 'User not approved yet', 403);
     }
 
-    // ✅ FIXED: Prepare progress data with proper defaults and validation
+    // ✅ Prepare progress data with correct date
     const progressData = {
       tg_id: telegramId,
-      date: new Date().toISOString().split('T')[0],
+      date: todayDate, // ✅ Foydalanuvchi timezone bo'yicha sana
       shart_1: parseInt(shart_1) || 0,
       shart_2: parseInt(shart_2) || 0,
       shart_3: parseInt(shart_3) || 0,
@@ -285,7 +381,7 @@ export const submitDailyProgress = async (req, res) => {
       distance_km: distanceKm
     };
 
-    // ✅ FIXED: UPSERT (insert or update) today's progress
+    // ✅ UPSERT (insert or update) today's progress
     const { data: progress, error: progressError } = await supabase
       .from('daily_progress')
       .upsert(progressData, {
@@ -298,7 +394,6 @@ export const submitDailyProgress = async (req, res) => {
     if (progressError) {
       console.error('Database error in submitProgress:', progressError);
       
-      // Handle specific database errors
       if (progressError.code === '23503') {
         return sendError(res, 'User reference not found', 400);
       }
@@ -306,7 +401,7 @@ export const submitDailyProgress = async (req, res) => {
       return sendServerError(res, progressError);
     }
 
-    // ✅ Update user achievements asynchronously (don't wait)
+    // ✅ Update user achievements asynchronously
     updateUserAchievements(telegramId).catch(error => {
       console.error('Achievement update failed (non-critical):', error);
     });
@@ -315,16 +410,18 @@ export const submitDailyProgress = async (req, res) => {
       date: progress.date,
       total_points: progress.total_points,
       pages_read: progress.pages_read,
-      distance_km: progress.distance_km
+      distance_km: progress.distance_km,
+      timezone: userTimezone
     });
 
-    // ✅ FIXED: Return response in format frontend expects
+    // ✅ Return response in format frontend expects
     const response = {
       success: true,
       totalPoints: progress.total_points,
       message: `Ma'lumotlar muvaffaqiyatli saqlandi! ${progress.total_points}/10 vazifa bajarildi.`,
       progress: {
         date: progress.date,
+        user_timezone: userTimezone, // ✅ Debug uchun
         total_points: progress.total_points,
         pages_read: progress.pages_read,
         distance_km: parseFloat(progress.distance_km),
@@ -359,8 +456,7 @@ export const submitDailyProgress = async (req, res) => {
 };
 
 /**
- * ✅ NEW: Get user progress for specific date
- * GET /tasks/progress/:userId/:date
+ * ✅ Get user progress for specific date
  */
 export const getUserDailyProgress = async (req, res) => {
   try {
@@ -443,8 +539,7 @@ export const getUserDailyProgress = async (req, res) => {
 };
 
 /**
- * ✅ NEW: Get user progress history
- * GET /tasks/history/:userId?days=30
+ * ✅ Get user progress history
  */
 export const getUserProgressHistory = async (req, res) => {
   try {
@@ -452,7 +547,7 @@ export const getUserProgressHistory = async (req, res) => {
     const { days = 30 } = req.query;
     
     const telegramId = parseInt(userId);
-    const daysCount = Math.min(parseInt(days) || 30, 365); // Max 1 year
+    const daysCount = Math.min(parseInt(days) || 30, 365);
     
     if (!telegramId || telegramId <= 0) {
       return sendError(res, 'Invalid userId', 400);

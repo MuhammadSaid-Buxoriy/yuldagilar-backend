@@ -1,10 +1,15 @@
 // =====================================================
-// AUTHENTICATION ROUTES - Frontend Compatible + Photo Update
+// AUTHENTICATION ROUTES - PHOTO REFRESH QO'SHILDI
 // =====================================================
-// File: src/routes/auth.js
-
 import express from 'express';
-import { checkUserAuth, registerUser, approveUser, rejectUser, updateUserPhoto } from '../controllers/authController.js';
+import { 
+  checkUserAuth, 
+  registerUser, 
+  approveUser, 
+  rejectUser, 
+  updateUserPhoto,
+  refreshAllPhotos
+} from '../controllers/authController.js';
 import { asyncHandler } from '../utils/responses.js';
 
 const router = express.Router();
@@ -17,8 +22,6 @@ const router = express.Router();
  * Check user authentication status
  * POST /api/auth/check
  * Body: { userId: 123456789 }
- * 
- * Frontend expects this exact format!
  */
 router.post('/check', asyncHandler(checkUserAuth));
 
@@ -30,23 +33,27 @@ router.post('/check', asyncHandler(checkUserAuth));
 router.post('/register', asyncHandler(registerUser));
 
 /**
- * ✅ YANGI: Profil rasmini yangilash
+ * ✅ Update user photo with validation
  * PUT /api/auth/update-photo/:userId
  * Body: { photo_url: "https://..." }
  */
 router.put('/update-photo/:userId', asyncHandler(updateUserPhoto));
 
 /**
+ * ✅ YANGI: Refresh all user photos (Admin/Maintenance)
+ * POST /api/auth/refresh-photos
+ */
+router.post('/refresh-photos', asyncHandler(refreshAllPhotos));
+
+/**
  * Approve user by admin
  * POST /api/auth/approve/:tg_id
- * Admin only endpoint
  */
 router.post('/approve/:tg_id', asyncHandler(approveUser));
 
 /**
  * Reject user by admin  
  * POST /api/auth/reject/:tg_id
- * Admin only endpoint
  */
 router.post('/reject/:tg_id', asyncHandler(rejectUser));
 
@@ -57,10 +64,8 @@ router.post('/reject/:tg_id', asyncHandler(rejectUser));
 /**
  * Legacy GET route support
  * GET /api/auth/check/:tg_id
- * Converts to POST format for compatibility
  */
 router.get('/check/:tg_id', asyncHandler(async (req, res) => {
-  // Convert GET to POST format
   req.body = { userId: req.params.tg_id };
   return await checkUserAuth(req, res);
 }));
